@@ -445,38 +445,22 @@ def create_rag_chain(main_llm, local_llm, retriever):
         # PROMPT VIẾT LẠI CÂU HỎI
         # ====================================================================
         contextualize_q_system_prompt = """
-Bạn là một công cụ xử lý ngôn ngữ tự nhiên tự động.
-NHIỆM VỤ ĐỘC QUYỀN CỦA BẠN: Đọc "Lịch sử trò chuyện" (nếu có) và "Câu hỏi mới nhất" của người dùng. Sau đó, CHỈ xuất ra một câu hỏi duy nhất đã được làm rõ ngữ cảnh.
+BẠN LÀ MỘT CÔNG CỤ XỬ LÝ VĂN BẢN. BẠN KHÔNG PHẢI LÀ CHATBOT.
+TUYỆT ĐỐI KHÔNG ĐƯỢC TRẢ LỜI CÂU HỎI DƯỚI BẤT KỲ HÌNH THỨC NÀO.
 
-CÁC QUY TẮC CỐT LÕI (PHẢI TUÂN THỦ TUYỆT ĐỐI):
-1. KHÔNG BAO GIỜ ĐƯỢC TRẢ LỜI CÂU HỎI. Không giải thích, không thêm kiến thức cá nhân, không cung cấp thông tin.
-2. NẾU câu hỏi mới nhất đã rõ ràng, có đầy đủ chủ ngữ và đối tượng, BẠN PHẢI GIỮ NGUYÊN CÂU HỎI ĐÓ.
-3. CHỈ khi câu hỏi bị thiếu chủ ngữ, dùng đại từ (nó, cái đó, ngành này) hoặc mang tính nối tiếp, bạn mới được dùng thông tin từ Lịch sử trò chuyện để điền vào cho rõ nghĩa.
-4. BẮT BUỘC phải bọc kết quả cuối cùng trong thẻ <rewritten_question> và </rewritten_question>.
+Nhiệm vụ: Phân tích lịch sử trò chuyện và bổ sung ngữ cảnh cho câu hỏi mới nhất để tạo thành 1 câu độc lập, rõ nghĩa.
 
-CÁC VÍ DỤ:
+Ví dụ:
+- Lịch sử: Human: Điểm chuẩn năm 2025? | AI: (trả lời...)
+- Câu hỏi mới: Còn thi ĐGNL thì sao?
+=> Viết lại thành: Điểm chuẩn năm 2025 nếu sử dụng kết quả thi ĐGNL là bao nhiêu?"""
 
-[Ví dụ 1 - Câu hỏi nối tiếp cần làm rõ]
-Lịch sử: User: Ngành CNTT học gì? - AI: Ngành này học lập trình.
-Câu hỏi mới: Học phí bao nhiêu?
-Output: <rewritten_question>Học phí ngành Công nghệ thông tin là bao nhiêu?</rewritten_question>
-
-[Ví dụ 2 - Câu hỏi ĐÃ RÕ RÀNG (Giữ nguyên, TUYỆT ĐỐI KHÔNG TRẢ LỜI)]
-Lịch sử: Trống
-Câu hỏi mới: Hồ sơ xét tuyển ĐGNL gồm những gì?
-Output: <rewritten_question>Hồ sơ xét tuyển ĐGNL gồm những gì?</rewritten_question>
-
-[Ví dụ 3 - Câu hỏi ĐÃ RÕ RÀNG (Giữ nguyên, TUYỆT ĐỐI KHÔNG TRẢ LỜI)]
-Lịch sử: Trống
-Câu hỏi mới: Chuẩn đầu ra ngành CNTT gồm những kỹ năng gì?
-Output: <rewritten_question>Chuẩn đầu ra ngành Công nghệ thông tin gồm những kỹ năng gì?</rewritten_question>
-"""
         contextualize_q_prompt = ChatPromptTemplate.from_messages([
             ("system", contextualize_q_system_prompt),
             MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
+            ("human", "Câu hỏi mới cần xử lý: {input}\n\nLỆNH CƯỠNG CHẾ: KHÔNG TRẢ LỜI CÂU HỎI NÀY. CHỈ XUẤT RA DUY NHẤT 1 CÂU HỎI ĐÃ ĐƯỢC VIẾT LẠI:"),
         ])
-        
+
         # LLM Chain chỉ để tạo ra String câu hỏi mới
         rewrite_chain = contextualize_q_prompt | local_llm | (lambda x: x.content)
 
@@ -548,10 +532,11 @@ Output: <rewritten_question>Chuẩn đầu ra ngành Công nghệ thông tin g�
 5. Công thức toán/tổ hợp môn (nếu có) phải viết bằng văn bản thuần túy kết hợp Markdown.
 </answer-format-rules>
 """
+
         qa_prompt = ChatPromptTemplate.from_messages([
             ("system", qa_system_prompt),
             MessagesPlaceholder("chat_history"),
-            ("human", "{input}"), 
+            ("human", "{input}"),
         ])
         
         # Lắp ráp luồng RAG hoàn chỉnh
