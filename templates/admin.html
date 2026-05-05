@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Cloud Storage</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" />
+    
+    <style>
+        /* GCP Dark Theme Variables */
+        :root {
+            --gcp-bg: #121212;
+            --gcp-surface: #121212;
+            --gcp-surface-2: #282a2d;
+            --gcp-border: #3c4043;
+            --gcp-text: #e8eaed;
+            --gcp-text-muted: #9aa0a6;
+            --gcp-primary: #8ab4f8;
+            --gcp-primary-hover: #d2e3fc;
+            --gcp-primary-bg: rgba(138, 180, 248, 0.12);
+            --gcp-danger: #f28b82;
+            --gcp-danger-bg: rgba(242, 139, 130, 0.12);
+            --gcp-success: #81c995;
+            --gcp-warning: #fde293;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--gcp-bg);
+            color: var(--gcp-text);
+            height: 100vh;
+            overflow: hidden;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Top Navigation Bar */
+        .top-bar {
+            height: 48px;
+            min-height: 48px;
+            background-color: var(--gcp-surface);
+            border-bottom: 1px solid var(--gcp-border);
+            display: flex; align-items: center; padding: 0 16px; justify-content: space-between; z-index: 1000;
+        }
+        .top-bar-brand { display: flex; align-items: center; font-size: 18px; font-weight: 500; color: #fff; text-decoration: none; }
+        .top-bar-brand i { color: var(--gcp-primary); font-size: 20px; margin-right: 12px; }
+        .top-search-box {
+            background-color: rgba(255, 255, 255, 0.12); border: 1px solid transparent; border-radius: 4px;
+            padding: 6px 12px; color: #fff; width: 400px; display: flex; align-items: center;
+        }
+        .top-search-box i { color: var(--gcp-text-muted); margin-right: 8px; }
+
+        /* Main Wrapper */
+        .main-wrapper { display: flex; flex-grow: 1; overflow: hidden; }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 250px; min-width: 250px; flex-shrink: 0;
+            background-color: var(--gcp-surface); border-right: 1px solid var(--gcp-border);
+            display: flex; flex-direction: column; padding-top: 16px;
+        }
+        .nav-pills .nav-link {
+            color: var(--gcp-text-muted); border-radius: 0 24px 24px 0; margin-right: 16px;
+            padding: 10px 24px; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 12px; transition: all 0.2s;
+        }
+        .nav-pills .nav-link:hover { background-color: rgba(255,255,255,0.04); color: var(--gcp-text); }
+        .nav-pills .nav-link.active { background-color: var(--gcp-primary-bg); color: var(--gcp-primary); }
+
+        .content-area { 
+            flex-grow: 1; 
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Cực kỳ quan trọng: Khóa cuộn toàn trang */
+            background-color: var(--gcp-bg); 
+            min-width: 0; 
+        }
+        
+        .page-header {
+            padding: 20px 24px; border-bottom: 1px solid var(--gcp-border);
+            display: flex; justify-content: space-between; align-items: center; background-color: var(--gcp-surface);
+        }
+        .page-title { font-size: 20px; font-weight: 400; margin: 0; color: #fff;}
+
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9aa0a6; }
+
+        /* GCP Cards */
+        .gcp-card { background: var(--gcp-surface); border: 1px solid var(--gcp-border); border-radius: 8px; margin-bottom: 24px; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3); }
+        .gcp-card-header { padding: 16px 20px; border-bottom: 1px solid var(--gcp-border); display: flex; justify-content: space-between; align-items: center; }
+        .gcp-card-title { font-size: 16px; font-weight: 500; margin: 0; color: #fff;}
+        .gcp-card-body { padding: 20px; }
+        .gcp-card-footer { padding: 16px 20px; border-top: 1px solid var(--gcp-border); background: rgba(255,255,255,0.02); border-radius: 0 0 8px 8px; }
+
+        /* Buttons */
+        .btn-gcp-primary { background-color: var(--gcp-primary); color: #000; font-weight: 500; border: none; font-size: 13px; padding: 6px 16px;}
+        .btn-gcp-primary:hover { background-color: var(--gcp-primary-hover); color: #000;}
+        .btn-gcp-danger { background-color: transparent; color: var(--gcp-danger); border: 1px solid var(--gcp-danger); font-weight: 500; font-size: 13px; padding: 6px 16px;}
+        .btn-gcp-danger:hover { background-color: var(--gcp-danger-bg); color: var(--gcp-danger);}
+        .btn-gcp-outline { background-color: transparent; color: var(--gcp-primary); border: 1px solid var(--gcp-border); font-weight: 500; font-size: 13px; padding: 6px 16px;}
+        .btn-gcp-outline:hover { background-color: var(--gcp-primary-bg); border-color: var(--gcp-primary);}
+
+        /* GCP Tabs */
+        .gcp-tabs { border-bottom: 1px solid var(--gcp-border); margin: 0; padding: 0 10px; }
+        .gcp-tabs .nav-link { color: var(--gcp-text-muted); border: none; border-bottom: 2px solid transparent; background: transparent; font-weight: 500; padding: 12px 20px; font-size: 14px; border-radius: 0;}
+        .gcp-tabs .nav-link:hover { color: var(--gcp-text); border-color: transparent; }
+        .gcp-tabs .nav-link.active { color: var(--gcp-primary); border-bottom: 2px solid var(--gcp-primary); background: transparent; }
+
+        /* Tables Dark */
+        .table-dark-gcp { color: var(--gcp-text); --bs-table-bg: transparent; margin-bottom: 0;}
+        .table-dark-gcp th { border-bottom: 2px solid var(--gcp-border); color: var(--gcp-text-muted); font-weight: 500; font-size: 13px; padding: 12px 20px;}
+        .table-dark-gcp td { border-bottom: 1px solid var(--gcp-border); color: var(--gcp-text); font-size: 13px; padding: 12px 20px; vertical-align: middle;}
+        .table-dark-gcp tbody tr:hover { background-color: rgba(255,255,255,0.03); }
+        .file-row { cursor: pointer; }
+
+        /* Modal Dark */
+        .modal-content { background-color: var(--gcp-surface); color: var(--gcp-text); border: 1px solid var(--gcp-border); box-shadow: 0 24px 38px 3px rgba(0,0,0,0.14);}
+        .modal-header { border-bottom: 1px solid var(--gcp-border); }
+        .modal-footer { border-top: 1px solid var(--gcp-border); }
+        .form-control { background-color: var(--gcp-bg); border: 1px solid var(--gcp-border); color: var(--gcp-text); font-size: 13px;}
+        .form-control:focus { background-color: var(--gcp-bg); border-color: var(--gcp-primary); color: var(--gcp-text); box-shadow: 0 0 0 2px var(--gcp-primary-bg);}
+        
+        /* Dropzone Dark */
+        .dropzone { border: 2px dashed var(--gcp-border); background: var(--gcp-surface-2); border-radius: 8px; color: var(--gcp-text-muted); min-height: 150px; display: flex; align-items: center; justify-content: center; }
+        .dropzone:hover { border-color: var(--gcp-primary); background: rgba(138, 180, 248, 0.05); }
+        .dropzone .dz-message { margin: 0; font-size: 15px; font-weight: 500;}
+        .dropzone-loading-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 8px;
+            background: rgba(32, 33, 36, 0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000; display: none;
+        }
+
+        /* jsTree Dark Override */
+        .jstree-default .jstree-anchor { color: var(--gcp-text) !important; font-size: 14px;}
+        .jstree-default .jstree-clicked { background: var(--gcp-primary-bg) !important; color: var(--gcp-primary) !important; border-radius: 4px; box-shadow: none; }
+        .jstree-default .jstree-hovered { background: rgba(255,255,255,0.05) !important; border-radius: 4px; box-shadow: none; }
+        
+        /* DataTables & Pagination Dark Override */
+        .dataTables_wrapper .dataTables_length, 
+        .dataTables_wrapper .dataTables_filter, 
+        .dataTables_wrapper .dataTables_info, 
+        .dataTables_wrapper .dataTables_processing { 
+            color: var(--gcp-text-muted) !important; 
+            font-size: 13px; 
+            margin-bottom: 15px;
+        }
+        .dataTables_length select, .dataTables_filter input { 
+            background-color: var(--gcp-bg); 
+            border: 1px solid var(--gcp-border); 
+            color: var(--gcp-text); 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            outline: none;
+        }
+        .dataTables_length select:focus, .dataTables_filter input:focus {
+            border-color: var(--gcp-primary);
+        }
+        
+        /* Cấu hình nút phân trang (Pagination Bootstrap 5) */
+        .dataTables_wrapper .pagination { margin-top: 15px; }
+        .dataTables_wrapper .page-item .page-link {
+            background-color: transparent;
+            border-color: var(--gcp-border);
+            color: var(--gcp-text-muted);
+            font-size: 13px;
+            box-shadow: none;
+        }
+        .dataTables_wrapper .page-item.active .page-link {
+            background-color: var(--gcp-primary-bg);
+            border-color: var(--gcp-primary);
+            color: var(--gcp-primary);
+            font-weight: 500;
+        }
+        .dataTables_wrapper .page-item:not(.active):not(.disabled) .page-link:hover {
+            background-color: rgba(255,255,255,0.05);
+            color: var(--gcp-text);
+        }
+        .dataTables_wrapper .page-item.disabled .page-link {
+            background-color: rgba(255,255,255,0.02);
+            color: #5f6368;
+            border-color: var(--gcp-border);
+        }
+    </style>
+</head>
+<body>
+
+    <header class="top-bar">
+        <div class="d-flex align-items-center gap-4">
+            <a href="#" class="top-bar-brand">
+                ChatBot Cloud File Manager
+            </a>
+        </div>
+        <div>
+            <a href="/admin/console" class="btn btn-gcp-outline py-1"><i class="bi bi-terminal me-1"></i> Go to Server Console</a>
+        </div>
+    </header>
+
+    <div class="main-wrapper">
+        <main class="content-area">
+            <div class="p-4 d-flex flex-grow-1 overflow-hidden">
+                <div class="row w-100 m-0 h-100">
+                    
+                    <div class="col-md-4 d-flex flex-column h-100 ps-0 pe-3">
+                        <div class="gcp-card d-flex flex-column flex-grow-1 mb-0">
+                            <div class="gcp-card-header flex-shrink-0">
+                                <h2 class="gcp-card-title"><i class="bi bi-diagram-3 me-2 text-primary"></i> Directory Tree</h2>
+                                <button class="btn btn-sm btn-gcp-outline py-1 px-2" onclick="refreshTree()" title="Làm mới"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                            <div class="gcp-card-body flex-grow-1 custom-scrollbar" style="overflow-y: auto; min-height: 0;">
+                                <div id="jstree_div"></div>
+                            </div>
+                            <div class="gcp-card-footer flex-shrink-0">
+                                <label style="color: white !important;" class="form-label text-muted small fw-bold text-uppercase mb-2">Tạo thư mục con</label>
+                                <div class="input-group">
+                                    <input type="text" id="newFolderName" class="form-control" placeholder="Nhập tên thư mục...">
+                                    <button class="btn btn-gcp-primary" onclick="createFolder()">CREATE</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-8 h-100 pe-0 ps-2 custom-scrollbar" style="overflow-y: auto;">
+                        <div class="pe-2 pb-2"> <div class="gcp-card mb-4">
+                                <div class="gcp-card-header">
+                                    <div>
+                                        <h2 class="gcp-card-title mb-1">Upload Documents</h2>
+                                        <small class="text-muted" style="color:white !important">Target Path: <code id="currentPath" class="text-warning fs-6">root</code></small>
+                                    </div>
+                                    <button class="btn btn-gcp-danger" onclick="deleteCurrentFolder()"><i class="bi bi-trash3 me-1"></i> DELETE FOLDER</button>
+                                </div>
+                                <div class="gcp-card-body position-relative">
+                                    <form action="/api/upload" class="dropzone" id="myDropzone">
+                                        <div class="dz-message" data-dz-message>
+                                            <i class="bi bi-cloud-arrow-up fs-2 d-block mb-2 text-primary"></i>
+                                            <span>Kéo thả file Word, PDF, TXT vào đây để tự động xử lý RAG</span>
+                                        </div>
+                                    </form>
+                                    <div id="dz-loading" class="dropzone-loading-overlay">
+                                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                                        <h6 class="text-white fw-normal tracking-wide">ĐANG PHÂN TÍCH VÀ TRÍCH XUẤT ẢNH...</h6>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="gcp-card mb-4">
+                                <div class="gcp-card-header d-flex flex-column align-items-start p-0">
+                                    <ul class="nav nav-tabs gcp-tabs w-100 pt-2" id="fileTabs" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active" id="md-tab" data-bs-toggle="tab" data-bs-target="#md-pane" type="button" role="tab"><i class="bi bi-markdown-fill me-1"></i> Đã xử lý (.md)</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw-pane" type="button" role="tab"><i class="bi bi-file-earmark-text me-1"></i> Bản gốc</button>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="gcp-card-body p-0">
+                                    <div class="p-3 m-3 rounded" style="background-color: rgba(138, 180, 248, 0.1); border-left: 3px solid var(--gcp-primary);">
+                                        <div class="d-flex align-items-start gap-2">
+                                            <i class="bi bi-info-circle text-primary mt-1"></i>
+                                            <div class="text-muted" style="font-size: 13px; color: white !important;">
+                                                Sau khi upload, file sẽ tự động được bóc tách nội dung thô sang định dạng Markdown (.md). Hãy nhấp vào <b>Sửa</b> để kiểm tra lại các lỗi ngữ nghĩa hoặc bảng biểu (nếu có). Sau khi thêm/sửa file, hãy sang trang <b>Server Console</b> để chạy lại Pipeline Đồng bộ Vector.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="tab-content" id="fileTabsContent">
+                                        <div class="tab-pane fade show active" id="md-pane" role="tabpanel">
+                                            <table class="table table-dark-gcp w-100">
+                                                <thead><tr><th>Tên file (.md) - Nhấp đúp để tải</th><th class="text-end" style="width: 25%">Hành động</th></tr></thead>
+                                                <tbody id="md-list-body"><tr><td colspan="2" class="text-center py-4 text-muted">Chưa chọn thư mục</td></tr></tbody>
+                                            </table>
+                                        </div>
+                                        <div class="tab-pane fade" id="raw-pane" role="tabpanel">
+                                            <table class="table table-dark-gcp w-100">
+                                                <thead><tr><th>Tên file gốc - Nhấp đúp để tải</th><th class="text-end" style="width: 15%">Hành động</th></tr></thead>
+                                                <tbody id="raw-list-body"><tr><td colspan="2" class="text-center py-4 text-muted">Chưa chọn thư mục</td></tr></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="gcp-card mb-0">
+                                <div class="gcp-card-header">
+                                    <h2 class="gcp-card-title"><i class="bi bi-clock-history me-2 text-primary"></i> Lịch sử hoạt động</h2>
+                                </div>
+                                <div class="gcp-card-body">
+                                    <table id="historyTable" class="table table-dark-gcp w-100">
+                                        <thead>
+                                            <tr><th>Thời gian</th><th>Hành động</th><th>Tên file/Thư mục</th><th>Đường dẫn</th></tr>
+                                        </thead>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal fade" id="editMdModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header p-4">
+                    <h5 class="modal-title fs-5 fw-bold" id="editMdModalLabel">Chỉnh sửa file Markdown</h5>
+                    <div class="" style="display:flex; flex-direction: row; align-items: center;">
+                        <a href="https://markdownlivepreview.com/" target="_blank" class="btn btn-sm btn-gcp-outline me-2" style="min-height: 30px; display: flex; justify-content: center; align-items: center;">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> Trình duyệt xem thử
+                        </a>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                </div>
+                
+                <div class="modal-body row g-0 p-0">
+                    <div class="col-md-8 p-4 d-flex flex-column h-100">
+                        <div class="text-muted small mb-3 flex-shrink-0 alert alert-danger">
+                            Lưu ý: Thận trọng khi điều chỉnh nội dung. Bảng biểu (Tables) bị dư khoảng trắng không ảnh hưởng đến AI, miễn là cấu trúc `|` vẫn thẳng hàng.
+                        </div>
+                        <textarea id="mdEditor" class="form-control font-monospace flex-grow-1 custom-scrollbar" style="font-size: 13px; color: var(--gcp-success); background: #000; border: 1px solid var(--gcp-border); padding: 16px; resize: none;"></textarea>
+                    </div>
+                    
+                    <div class="col-md-4 p-4 border-start border-secondary d-flex flex-column h-100" style="background: rgba(0,0,0,0.2);">
+                        <h6 class="text-primary fw-bold mb-3 flex-shrink-0">Hình ảnh đính kèm</h6>
+                        <div id="mdImageList" class="d-flex flex-column gap-3 pe-2 flex-grow-1 custom-scrollbar" style="overflow-y: auto; min-height: 0;">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer p-3">
+                    <button type="button" class="btn btn-gcp-outline" data-bs-dismiss="modal">HỦY</button>
+                    <button type="button" class="btn btn-gcp-primary ms-2" onclick="saveMarkdown()">LƯU THAY ĐỔI</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        let currentSelectedFolder = "root";
+        let editingFilename = "";
+        let historyDataTable;
+
+        $(document).ready(function() {
+            historyDataTable = $('#historyTable').DataTable({
+                ajax: { url: '/api/history', dataSrc: '' },
+                columns: [
+                    { data: 'Thời gian' },
+                    { 
+                        data: 'Hành động',
+                        render: function(data) {
+                            if(data === 'Upload') return `<span class="badge bg-success">Upload</span>`;
+                            if(data === 'Sửa file MD') return `<span class="badge bg-warning text-dark">Sửa MD</span>`;
+                            if(data.includes('Xóa')) return `<span class="badge bg-danger">${data}</span>`;
+                            return `<span class="badge bg-primary">${data}</span>`;
+                        }
+                    },
+                    { data: 'Tên file' },
+                    { data: 'Thư mục' }
+                ],
+                order: [[0, "desc"]], 
+                pageLength: 10,
+                language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/vi.json' }
+            });
+
+            initTree();
+        });
+
+        function initTree() {
+            $('#jstree_div').jstree({
+                'core': { 'data': { 'url': '/api/tree', 'data': function (node) { return { 'id': node.id }; } } }
+            }).on('changed.jstree', function (e, data) {
+                if(data.selected.length > 0) {
+                    currentSelectedFolder = data.selected[0];
+                    $('#currentPath').text(currentSelectedFolder === 'root' ? 'documentBL (Gốc)' : currentSelectedFolder);
+                    loadFiles();
+                }
+            });
+        }
+
+        function refreshTree() { $('#jstree_div').jstree(true).refresh(); }
+
+        function loadFiles() {
+            $.get('/api/files', { folder: currentSelectedFolder }, function(res) {
+                const rawTbody = $('#raw-list-body');
+                const mdTbody = $('#md-list-body');
+                rawTbody.empty(); mdTbody.empty();
+
+                // Tab RAW
+                if (res.raw.length === 0) rawTbody.append('<tr><td colspan="2" class="text-muted" style="color: white !important;">Không có file gốc.</td></tr>');
+                else res.raw.forEach(file => {
+                    const tdName = $('<td>').text(file).addClass('file-row text-start align-middle')
+                        .dblclick(() => { window.location.href = `/api/download?folder=${encodeURIComponent(currentSelectedFolder)}&filename=${encodeURIComponent(file)}`; });
+                    const btnDelete = $('<button>').addClass('btn btn-danger btn-sm').text('Xóa').click(() => { deleteFile(file); });
+                    rawTbody.append($('<tr>').append(tdName).append($('<td>').addClass('d-flex flex-row justify-content-end').append(btnDelete)));
+                });
+
+                // Tab MD
+                if (res.md.length === 0) mdTbody.append('<tr><td colspan="2" class="text-muted" style="color: white !important;">Không có file MD.</td></tr>');
+                else res.md.forEach(file => {
+                    const tdName = $('<td>').text(file).addClass('file-row text-start align-middle fw-bold text-success')
+                        .dblclick(() => { window.location.href = `/api/download?folder=${encodeURIComponent(currentSelectedFolder)}&filename=${encodeURIComponent(file)}`; });
+                    const btnEdit = $('<button>').addClass('btn btn-primary btn-sm me-2').text('📝 Sửa').click(() => { openEditModal(file); });
+                    const btnDelete = $('<button>').addClass('btn btn-danger btn-sm').text('Xóa').click(() => { deleteFile(file); });
+                    mdTbody.append($('<tr>').append(tdName).append($('<td>').addClass('d-flex flex-row justify-content-end').append(btnEdit).append(btnDelete)));
+                });
+            });
+        }
+
+        function openEditModal(filename) {
+            editingFilename = filename;
+            $('#editMdModalLabel').text(`Đang sửa: ${filename}`);
+            
+            $.get('/api/file/content', { folder: currentSelectedFolder, filename: filename }, function(res) {
+                $('#mdEditor').val(res.content);
+                
+                const imgList = $('#mdImageList');
+                imgList.empty();
+                if (res.images.length === 0) {
+                    imgList.append('<p class="text-muted small fst-italic" style="color: white !important;">Không có ảnh đi kèm.</p>');
+                } else {
+                    res.images.forEach(src => {
+                        imgList.append(`
+                            <div class="card shadow-sm">
+                                <img src="${src}" class="card-img-top p-1" alt="Image">
+                                <div class="card-footer bg-light p-2 text-center text-truncate small user-select-all" title="Copy tên ảnh">
+                                    <code>${src.split('/').pop()}</code>
+                                </div>
+                            </div>
+                        `);
+                    });
+                }
+                new bootstrap.Modal(document.getElementById('editMdModal')).show();
+            }).fail(function(xhr) { alert("Lỗi tải nội dung: " + xhr.responseJSON.detail); });
+        }
+
+        function saveMarkdown() {
+            const content = $('#mdEditor').val();
+            $.ajax({
+                url: '/api/file/content',
+                type: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ folder: currentSelectedFolder, filename: editingFilename, content: content }),
+                success: function(res) {
+                    alert(res.message);
+                    bootstrap.Modal.getInstance(document.getElementById('editMdModal')).hide();
+                    historyDataTable.ajax.reload();
+                },
+                error: function(xhr) {
+                    alert("Lỗi lưu file: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Unknown"));
+                }
+            });
+        }
+
+        function createFolder() {
+            const name = $('#newFolderName').val();
+            if (!name) return alert("Vui lòng nhập tên thư mục");
+            $.post('/api/folder', { parent: currentSelectedFolder, name: name }, function(response) {
+                alert(response.message); $('#newFolderName').val(''); refreshTree(); historyDataTable.ajax.reload();
+            }).fail(function(xhr) { alert("Lỗi: " + xhr.responseJSON.detail); });
+        }
+
+        function deleteCurrentFolder() {
+            if (currentSelectedFolder === "root") return alert("Không thể xóa thư mục gốc!");
+            if (!confirm(`CẢNH BÁO: Xóa thư mục "${currentSelectedFolder}"? Toàn bộ file sẽ bị xóa vĩnh viễn!`)) return;
+            $.ajax({
+                url: `/api/folder?folder=${encodeURIComponent(currentSelectedFolder)}`, type: 'DELETE',
+                success: function(res) {
+                    alert(res.message); currentSelectedFolder = "root"; refreshTree(); loadFiles(); historyDataTable.ajax.reload();
+                },
+                error: function(xhr) { alert("Lỗi: " + xhr.responseJSON.detail); }
+            });
+        }
+
+        function deleteFile(filename) {
+            if (!confirm(`Xóa file: ${filename}? Hành động này sẽ xóa gốc, bản MD và tất cả ảnh liên quan.`)) return;
+            $.ajax({
+                url: `/api/file?folder=${encodeURIComponent(currentSelectedFolder)}&filename=${encodeURIComponent(filename)}`, type: 'DELETE',
+                success: function(res) { loadFiles(); historyDataTable.ajax.reload(); },
+                error: function(xhr) { alert("Lỗi: " + xhr.responseJSON.detail); }
+            });
+        }
+
+        function updateVector() {
+            if (!confirm("Xóa Vector cũ và tái tạo lại?")) return;
+            const btn = $('#btnUpdateVector');
+            btn.prop('disabled', true).html('⏳ Đang xử lý...');
+            $.post('/api/update-vector', function(response) {
+                alert("✅ Cập nhật Vector thành công!"); historyDataTable.ajax.reload();
+            }).fail(function(xhr) {
+                alert("❌ Lỗi: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Lỗi không xác định"));
+            }).always(function() { btn.prop('disabled', false).html('⚡ Cập nhật Vector DB'); });
+        }
+
+		Dropzone.options.myDropzone = {
+			paramName: "file", maxFilesize: 50, acceptedFiles: ".pdf,.doc,.docx,.txt",
+			init: function() {
+				let activeUploads = 0;
+				this.on("sending", function(file, xhr, formData) {
+					formData.append("folder", currentSelectedFolder); activeUploads++; $('#dz-loading').css('display', 'flex');
+				});
+				this.on("success", function(file, response) {
+					loadFiles(); historyDataTable.ajax.reload(); setTimeout(() => { this.removeFile(file); }, 2000);
+				});
+				this.on("error", function(file, errorMessage) { alert("Lỗi: " + (errorMessage.detail || errorMessage)); });
+				this.on("complete", function(file) {
+					activeUploads--; if (activeUploads <= 0) { activeUploads = 0; $('#dz-loading').hide(); }
+				});
+			}
+		};
+    </script>
+</body>
+</html>

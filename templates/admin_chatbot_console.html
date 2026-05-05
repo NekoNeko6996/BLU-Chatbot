@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Cloud Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/material-darker.min.css">
+    
+    <style>
+        /* GCP Dark Theme Variables */
+        :root {
+            --gcp-bg: #121212;
+            --gcp-surface: #121212;
+            --gcp-surface-2: #282a2d;
+            --gcp-border: #3c4043;
+            --gcp-text: #e8eaed;
+            --gcp-text-muted: #9aa0a6;
+            --gcp-primary: #8ab4f8;
+            --gcp-primary-hover: #d2e3fc;
+            --gcp-primary-bg: rgba(138, 180, 248, 0.12);
+            --gcp-danger: #f28b82;
+            --gcp-danger-bg: rgba(242, 139, 130, 0.12);
+            --gcp-success: #81c995;
+            --gcp-warning: #fde293;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--gcp-bg);
+            color: var(--gcp-text);
+            height: 100vh;
+            overflow: hidden;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Top Navigation Bar */
+        .top-bar {
+            height: 48px;
+            flex-shrink: 0;
+            min-height: 48px;
+            background-color: var(--gcp-surface);
+            border-bottom: 1px solid var(--gcp-border);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            justify-content: space-between;
+            z-index: 1000;
+        }
+        .top-bar-brand {
+            display: flex;
+            align-items: center;
+            font-size: 18px;
+            font-weight: 500;
+            color: #fff;
+            text-decoration: none;
+        }
+        .top-bar-brand i { color: var(--gcp-primary); font-size: 20px; margin-right: 12px; }
+
+        /* Main Wrapper */
+        .main-wrapper {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 250px;
+            min-width: 250px; /* Thêm cố định chiều rộng tối thiểu */
+            flex-shrink: 0;   /* CHỐNG CO RÚT: Ngăn Flexbox bóp nghẹt sidebar */
+            background-color: var(--gcp-surface);
+            border-right: 1px solid var(--gcp-border);
+            display: flex;
+            flex-direction: column;
+            padding-top: 16px;
+        }
+
+        /* Content Area */
+        .content-area {
+            flex-grow: 1;
+            display: flex;          /* Bật Flexbox */
+            flex-direction: column; /* Xếp dọc */
+            overflow: hidden;       /* Khóa cuộn toàn trang, chỉ cho phép cuộn nội dung bên trong */
+            background-color: var(--gcp-bg);
+            min-width: 0;           /* Chống đẩy thanh Sidebar */
+        }
+
+        /* Tab Wrapper */
+        #v-pills-tabContent {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .tab-pane.active {
+            display: flex !important;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .nav-pills .nav-link {
+            color: var(--gcp-text-muted);
+            border-radius: 0 24px 24px 0;
+            margin-right: 16px;
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+        }
+        .nav-pills .nav-link:hover {
+            background-color: rgba(255,255,255,0.04);
+            color: var(--gcp-text);
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--gcp-primary-bg);
+            color: var(--gcp-primary);
+        }
+
+        /* Page Header */
+        .page-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--gcp-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--gcp-surface);
+            flex-shrink: 0; /* Không bị bóp méo khi màn hình thu nhỏ */
+        }
+        .page-title { font-size: 20px; font-weight: 400; margin: 0; color: #fff;}
+
+        /* GCP Cards */
+        .gcp-card {
+            background: var(--gcp-surface);
+            border: 1px solid var(--gcp-border);
+            margin: 24px;
+            box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3);
+            display: flex;          /* Bật Flexbox */
+            flex-direction: column; 
+            flex-grow: 1;           /* Bắt buộc thẻ Card chiếm hết không gian trống */
+            min-height: 0;          /* Rất quan trọng: cho phép nội dung con bên trong cuộn được */
+        }
+        .gcp-card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gcp-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .gcp-card-title { font-size: 16px; font-weight: 500; margin: 0; color: #fff;}
+        
+        .gcp-card-body { 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            flex-grow: 1; 
+            min-height: 0; 
+        }
+
+        /* Cloud Shell Console Style */
+        .console-box {
+            background-color: #000;
+            color: var(--gcp-success);
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            flex-grow: 1;           /* Chiếm trọn không gian của Card Body */
+            height: 100%;
+            overflow-y: auto;       /* Tự động hiện thanh cuộn khi log dài */
+            padding: 16px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* Bảng hiển thị ở tab Backup */
+        .table-responsive {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+		
+		/* Tùy chỉnh nhẹ lại CodeMirror để nó lấp đầy Card GCP của bạn */
+        .CodeMirror {
+            height: 100%;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .console-box::-webkit-scrollbar { width: 10px; }
+        .console-box::-webkit-scrollbar-track { background: #000; }
+        .console-box::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        .console-box::-webkit-scrollbar-thumb:hover { background: #666; }
+
+        .CodeMirror-vscrollbar::-webkit-scrollbar { width: 10px; }
+        .CodeMirror-vscrollbar::-webkit-scrollbar-track { background: #000; }        
+        .CodeMirror-vscrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover { background: #666; }
+
+        /* Buttons (GCP Style) */
+        .btn-gcp-primary { background-color: var(--gcp-primary); color: #000; font-weight: 500; border: none; font-size: 13px; padding: 6px 16px;}
+        .btn-gcp-primary:hover { background-color: var(--gcp-primary-hover); color: #000;}
+        .btn-gcp-danger { background-color: transparent; color: var(--gcp-danger); border: 1px solid var(--gcp-danger); font-weight: 500; font-size: 13px; padding: 6px 16px;}
+        .btn-gcp-danger:hover { background-color: var(--gcp-danger-bg); color: var(--gcp-danger);}
+        .btn-gcp-outline { background-color: transparent; color: var(--gcp-primary); border: 1px solid var(--gcp-border); font-weight: 500; font-size: 13px; padding: 6px 16px;}
+        .btn-gcp-outline:hover { background-color: var(--gcp-primary-bg); border-color: var(--gcp-primary);}
+
+        /* Badges */
+        .badge-running { background-color: rgba(129, 201, 149, 0.15); color: var(--gcp-success); border: 1px solid rgba(129, 201, 149, 0.3); font-weight: normal; padding: 6px 12px;}
+        .badge-stopped { background-color: var(--gcp-danger-bg); color: var(--gcp-danger); border: 1px solid rgba(242, 139, 130, 0.3); font-weight: normal; padding: 6px 12px;}
+
+        /* Tables Dark */
+        .table-dark-gcp { color: var(--gcp-text); --bs-table-bg: transparent; margin-bottom: 0;}
+        .table-dark-gcp th { border-bottom: 2px solid var(--gcp-border); color: var(--gcp-text-muted); font-weight: 500; font-size: 13px; padding: 12px 20px;}
+        .table-dark-gcp td { border-bottom: 1px solid var(--gcp-border); color: var(--gcp-text); font-size: 13px; padding: 12px 20px; vertical-align: middle;}
+        
+        /* Modal Dark */
+        .modal-content { background-color: var(--gcp-surface); color: var(--gcp-text); border: 1px solid var(--gcp-border); box-shadow: 0 24px 38px 3px rgba(0,0,0,0.14);}
+        .modal-header { border-bottom: 1px solid var(--gcp-border); }
+        .modal-footer { border-top: 1px solid var(--gcp-border); }
+        .form-control { background-color: var(--gcp-bg); border: 1px solid var(--gcp-border); color: var(--gcp-text); }
+        .form-control:focus { background-color: var(--gcp-bg); border-color: var(--gcp-primary); color: var(--gcp-text); box-shadow: 0 0 0 2px var(--gcp-primary-bg);}
+        .form-control:read-only { background-color: rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+
+    <header class="top-bar">
+        <div class="d-flex align-items-center gap-4">
+            <a href="#" class="top-bar-brand">
+                ChatBot Clould Console
+            </a>
+        </div>
+        <div>
+            <a href="/" class="btn btn-gcp-outline py-1"><i class="bi bi-folder2-open me-1"></i> Return to File Manager</a>
+        </div>
+    </header>
+
+    <div class="main-wrapper">
+        <nav class="sidebar">
+            <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                <p style="padding: 10px 24px; margin: 0;">Console</p>
+                <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#chatbot-pane" type="button" role="tab" onclick="switchTab('Chatbot Engine Server', 'chatbot')">
+                    <i class="bi bi-terminal"></i> Chatbot Engine Server
+                </button>
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#updater-pane" type="button" role="tab" onclick="switchTab('Vector Database Sync', 'updater')">
+                    <i class="bi bi-database-gear"></i> Vector Database Sync
+                </button>
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#backup-pane" type="button" role="tab" onclick="switchTab('Snapshots & Recovery', 'backup'); loadBackups();">
+                    <i class="bi bi-device-ssd"></i> Snapshots & Recovery
+                </button>
+				
+				<p style="padding: 10px 24px; margin: 0;">UI Config</p>
+				<button class="nav-link" data-bs-toggle="pill" data-bs-target="#fragment-pane" type="button" role="tab" onclick="switchTab('Top Message Fragment', 'fragment'); loadFragment();">
+                    <i class="bi bi-chat-square-dots"></i> Top Message Fragment
+                </button>
+
+                <p style="padding: 10px 24px; margin: 0;">ENV Config</p>
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#env-pane" type="button" role="tab" onclick="switchTab('Environment Variables', 'env'); loadEnv();">
+                    <i class="bi bi-gear-fill"></i> ENV Config
+                </button>
+
+                <p style="padding: 10px 24px; margin: 0;">Log</p>
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#prompt-log-pane" type="button" role="tab" onclick="switchTab('Prompt Debug Logs', 'prompt-log'); fetchPromptLogs();">
+                    <i class="bi bi-bug"></i> Prompt Debug Logs
+                </button>
+            </div>
+        </nav>
+
+        <main class="content-area">
+            <div class="page-header">
+                <h1 class="page-title" id="topPageTitle">Chatbot Engine Server</h1>
+                
+                <div id="header-controls">
+                    <div id="controls-chatbot" class="d-flex align-items-center gap-3">
+                        <span id="status-chatbot" class="badge rounded-pill badge-stopped">Checking status...</span>
+                        <div class="btn-group">
+                            <button id="btn-start-chatbot" class="btn btn-gcp-primary" onclick="manageService('chatbot', 'start')">START INSTANCE</button>
+                            <button id="btn-stop-chatbot" class="btn btn-gcp-danger" onclick="manageService('chatbot', 'stop')">STOP</button>
+                        </div>
+                    </div>
+
+                    <div id="controls-updater" class="align-items-center gap-3 d-none">
+                        <span id="status-updater" class="badge rounded-pill badge-stopped">Checking status...</span>
+                        <div class="btn-group">
+                            <button id="btn-start-updater" class="btn btn-gcp-primary" onclick="openBackupModal('update')">RUN PIPELINE</button>
+                            <button id="btn-stop-updater" class="btn btn-gcp-danger" onclick="manageService('updater', 'stop')">FORCE STOP</button>
+                        </div>
+                    </div>
+
+                    <div id="controls-backup" class="align-items-center gap-3 d-none">
+                        <button class="btn btn-gcp-primary" onclick="openBackupModal('manual')">CREATE SNAPSHOT</button>
+                    </div>
+					
+					<div id="controls-fragment" class="align-items-center gap-3 d-none">
+                        <button id="btn-save-fragment" class="btn btn-gcp-primary" onclick="saveFragment()">SAVE FRAGMENT</button>
+                    </div>
+
+                    <div id="controls-env" class="align-items-center gap-3 d-none">
+                        <button id="btn-save-env" class="btn btn-gcp-primary" onclick="saveEnv()">SAVE .ENV</button>
+                    </div>
+
+                    <div id="controls-prompt-log" class="align-items-center gap-3 d-none">
+                        <button class="btn btn-gcp-outline" onclick="fetchPromptLogs()"><i class="bi bi-arrow-clockwise"></i> REFRESH</button>
+                        <button class="btn btn-gcp-danger" onclick="clearPromptLogs()">CLEAR LOGS</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-content" id="v-pills-tabContent">
+                
+                <div class="tab-pane fade show active" id="chatbot-pane" role="tabpanel">
+                    <div class="gcp-card">
+                        <div class="gcp-card-body p-0">
+                            <pre id="log-chatbot" class="console-box m-0 border-0"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="updater-pane" role="tabpanel">
+                    <div class="mx-4 mt-4 p-3 rounded" style="background-color: rgba(253, 226, 147, 0.1); border-left: 4px solid var(--gcp-warning);">
+                        <div class="d-flex align-items-start gap-3">
+                            <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+                            <div style="font-size: 13px;">
+                                <strong class="text-white d-block mb-1">Cảnh báo hoạt động quan trọng</strong>
+                                Việc chạy Vector Sync sẽ xóa hoàn toàn và tạo lại  dựa trên thư mục <code>documentBL</code>.
+                                Không được buộc dừng trong quá trình thực thi để tránh làm hỏng cơ sở dữ liệu. Hãy nhớ khởi động lại Chatbot Engine sau khi quá trình đồng bộ hoàn tất.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gcp-card">
+                        
+                        <div class="gcp-card-body p-0">
+                            <pre id="log-updater" class="console-box m-0 border-0 rounded-bottom"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="backup-pane" role="tabpanel">
+                    <div class="gcp-card">
+                        <div class="table-responsive">
+                            <table class="table table-dark-gcp w-100">
+                                <thead>
+                                    <tr>
+                                        <th>Snapshot ID / Name</th>
+                                        <th>Description</th>
+                                        <th>Creation Time</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backup-list-body">
+                                    <tr><td colspan="4" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div> Loading data...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+				<div class="tab-pane fade" id="fragment-pane" role="tabpanel">
+                    <div class="d-flex flex-row flex-grow-1 gap-3 m-4" style="min-height: 0;">
+                        
+                        <div class="gcp-card m-0 w-50">
+                            <div class="gcp-card-header">
+                                <h2 class="gcp-card-title"><i class="bi bi-code-slash me-2"></i>HTML Source Editor</h2>
+                            </div>
+                            <div class="gcp-card-body p-0 d-flex flex-column">
+                                <textarea id="fragmentEditor"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="gcp-card m-0 w-50">
+                            <div class="gcp-card-header">
+                                <h2 class="gcp-card-title"><i class="bi bi-phone me-2"></i>Live Chat Preview</h2>
+                            </div>
+                            
+                            <div class="gcp-card-body d-flex justify-content-center align-items-center" style="background-color: #e8eaed; overflow-y: auto;">
+                                
+                                <div style="width: 100%; max-width: 380px; height: 550px; background: #fff; border-radius: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #ced4da;">
+                                    
+                                    <div style="background: #2b6ef6; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+                                        <h5 style="margin: 0; font-size: 1rem; font-family: system-ui, sans-serif; font-weight: 500;">Tư vấn Tuyển sinh BLU</h5>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button style="background: transparent; border: none; padding: 0; cursor: default;" title="Làm mới (Giả lập)">
+                                                <svg width="24px" height="24px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.395 12C4.395 12.414 4.731 12.75 5.145 12.75C5.559 12.75 5.895 12.414 5.895 12L4.395 12ZM6.919 8.518L5.658 7.705C4.832 8.985 4.393 10.477 4.395 12L5.895 12C5.893 10.765 6.249 9.556 6.919 8.518ZM9.631 6.223L9.038 4.845C7.652 5.441 6.475 6.437 5.658 7.705L6.919 8.518ZM13.105 5.868L13.406 4.399C11.939 4.099 10.415 4.254 9.038 4.845L9.631 6.223ZM16.19 7.571L17.27 6.53C16.226 5.447 14.88 4.705 13.406 4.399L13.105 5.868ZM17.714 10.207L19.155 9.793C18.803 8.567 18.155 7.446 17.269 6.529L16.19 7.571ZM18.395 12C18.395 13.236 18.04 14.445 17.37 15.483L18.631 16.296C19.457 15.016 19.896 13.524 19.895 12L18.395 12ZM14.658 17.778L15.251 19.156C16.637 18.56 17.814 17.564 18.631 16.296L17.37 15.483ZM11.184 18.132L10.883 19.602C12.35 19.902 13.874 19.746 15.251 19.156L14.658 17.778ZM8.099 16.43L7.02 17.471C8.063 18.553 9.409 19.296 10.883 19.602L11.184 18.132ZM5.134 14.207C5.486 15.433 6.134 16.554 7.02 17.471L8.099 16.43C7.383 15.688 6.86 14.783 6.575 13.793L5.134 14.207ZM4.395 12C4.396 12.766 4.607 13.518 5.134 14.207L6.575 13.793C6.182 13.251 5.958 12.635 5.895 12L4.395 12Z" fill="#FFF"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div style="background-color: #f4f7fb; color: #333; padding: 15px; overflow-y: auto; flex-grow: 1; font-family: system-ui, -apple-system, sans-serif; font-size: 14.4px;" id="mockChatBody">
+                                        
+                                        <div id="fragmentPreview"></div>
+                                        
+                                        <div style="display: flex; align-items: flex-end; justify-content: flex-end; margin-top: 25px; margin-bottom: 1rem;">
+                                            <div style="background-color: #2b6ef6; color: white; padding: 0.6rem 1rem; border-radius: 1rem; border-bottom-right-radius: 2px; max-width: 85%; font-size: 0.9rem; line-height: 1.5;">Học phí ngành CNTT?</div>
+                                            <div style="width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background-color: #dee2e6; display: flex; align-items: center; justify-content: center; font-size: 14px; margin-left: 0.5rem;">👤</div>
+                                        </div>
+
+                                        <div style="display: flex; align-items: flex-end; margin-bottom: 1rem;">
+                                            <div style="width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background-color: #2b6ef6; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; margin-right: 0.5rem;">🤖</div>
+                                            <div style="background-color: #eef4ff; padding: 0.6rem 1rem; border-radius: 1rem; border-bottom-left-radius: 2px; max-width: 85%; font-size: 0.9rem; line-height: 1.5;">Học phí ngành Công nghệ thông tin dự kiến khoảng 14 triệu VNĐ/năm nhé.</div>
+                                        </div>
+                                    </div>
+
+                                    <div style="background-color: #f4f7fb; padding: 10px; display: flex; gap: 8px; align-items: center; flex-shrink: 0; border-top: 1px solid #e9ecef;">
+                                        <input type="text" placeholder="Nhập câu hỏi tại đây..." style="flex-grow: 1; border: 1px solid #ced4da; border-radius: 50rem; padding: 8px 15px; outline: none; font-size: 14px; background-color: #fff;" disabled>
+                                        <button style="width: 40px; height: 40px; min-width: 40px; border-radius: 50%; background-color: #0d6efd; border: none; display: flex; justify-content: center; align-items: center; color: white;" disabled>
+                                            <svg width="20px" height="20px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.5 12H5.4M5.2 12.8L4.2 15.8C3.7 17.4 3.4 18.3 3.6 18.8C3.8 19.2 4.2 19.5 4.6 19.7C5.1 19.8 5.9 19.5 7.5 18.7L17.6 14.2C19.2 13.5 20 13.1 20.2 12.7C20.4 12.2 20.4 11.8 20.2 11.3C20 10.9 19.2 10.5 17.6 9.8L7.5 5.2C5.9 4.5 5.1 4.2 4.6 4.3C4.1 4.5 3.8 4.8 3.6 5.2C3.4 5.7 3.7 6.5 4.2 8.2L5.2 11.3C5.3 11.6 5.4 11.7 5.4 11.8C5.4 12 5.4 12.1 5.4 12.2C5.4 12.4 5.3 12.5 5.2 12.8Z" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="env-pane" role="tabpanel">
+                    <div class="mx-4 mt-4 p-3 rounded" style="background-color: rgba(242, 139, 130, 0.1); border-left: 4px solid var(--gcp-danger);">
+                        <div class="d-flex align-items-start gap-3">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                            <div style="font-size: 13px;">
+                                <strong class="text-white d-block mb-1">Cảnh báo hệ thống</strong>
+                                Chỉnh sửa sai cấu trúc file .env có thể làm sập toàn bộ hệ thống. 
+                                Không được sử dụng khoảng trắng xung quanh dấu <code>=</code>. Sau khi lưu, bạn cần chạy lại <code>server-admin.py</code>(quá trình sẽ tắt toàn bộ server con như chat server và vector server(nếu đang chạy) để áp dụng env mới.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gcp-card">
+                        <div class="gcp-card-header">
+                            <h2 class="gcp-card-title"><i class="bi bi-file-earmark-code me-2"></i>.env Source Editor</h2>
+                        </div>
+                        <div class="gcp-card-body p-0 d-flex flex-column">
+                            <textarea id="envEditor" class="form-control console-box border-0 m-0" style="resize: none; background-color: #1e1e1e; color: #d4d4d4; outline: none;" spellcheck="false" placeholder="Loading..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="tab-pane fade" id="prompt-log-pane" role="tabpanel">
+                    <div class="gcp-card">
+                        <div class="gcp-card-header">
+                            <h2 class="gcp-card-title"><i class="bi bi-code-square me-2"></i>Live LLM Prompt Stream (Last 1000 lines)</h2>
+                        </div>
+                        <div class="gcp-card-body p-0">
+                            <pre id="log-prompt" class="console-box m-0 border-0" style="color: #8ab4f8;"></pre>
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+        </main>
+    </div>
+
+    <div class="modal fade" id="backupModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" style="font-size: 18px; font-weight: 500;" id="backupModalLabel">Create Vector Snapshot</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div id="backupHelperBox" class="p-3 mb-4 rounded" style="background-color: rgba(138, 180, 248, 0.1); border-left: 4px solid var(--gcp-primary); display: none;">
+                        <div class="d-flex align-items-start gap-2">
+                            <i class="bi bi-info-circle text-primary"></i>
+                            <span id="backupHelperText" style="font-size: 13px;"></span>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label" style="font-size: 13px; font-weight: 500; color: var(--gcp-text-muted);">Snapshot Name (Auto-generated)</label>
+                        <input type="text" id="backupName" class="form-control" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label" style="font-size: 13px; font-weight: 500; color: var(--gcp-text-muted);">Description (Optional)</label>
+                        <textarea id="backupDesc" class="form-control" rows="3" placeholder="e.g., Pre-update state before adding new admission rules..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-gcp-outline" data-bs-dismiss="modal">CANCEL</button>
+                    <button type="button" class="btn btn-gcp-danger ms-2" id="btnSkipBackup" style="display:none;" onclick="triggerUpdateServiceOnly()">SKIP & UPDATE</button>
+                    <button type="button" class="btn btn-gcp-primary ms-2" id="btnSubmitBackup">CREATE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/properties/properties.min.js"></script>
+    <script>
+        // Quản lý trạng thái tự động cuộn (Auto-scroll) khi có log mới
+        let autoScroll = { chatbot: true, updater: true };
+		let currentBackupMode = 'manual';
+
+        function switchTab(title, tabId) {
+            // Đổi tiêu đề
+            $('#topPageTitle').text(title);
+            
+            // Ẩn tất cả các cụm nút
+            $('#controls-chatbot, #controls-updater, #controls-backup, #controls-fragment, #controls-env, #controls-prompt-log').addClass('d-none').removeClass('d-flex');
+            
+            // Chỉ hiện cụm nút của Tab đang được chọn
+            $(`#controls-${tabId}`).removeClass('d-none').addClass('d-flex');
+        }
+
+        $('.console-box').on('scroll', function() {
+            const service = this.id.replace('log-', '');
+            // Cho phép sai số 15px khi người dùng cuộn kịch đáy
+            autoScroll[service] = (this.scrollTop + this.clientHeight >= this.scrollHeight - 15);
+        });
+
+        $('button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+            const target = $(e.target).attr("data-bs-target"); 
+            if(target === '#updater-pane' && autoScroll['updater']) {
+                $('#log-updater').scrollTop($('#log-updater')[0].scrollHeight);
+            } else if (target === '#chatbot-pane' && autoScroll['chatbot']) {
+                $('#log-chatbot').scrollTop($('#log-chatbot')[0].scrollHeight);
+            }
+        });
+
+        function manageService(service, action) {
+            $(`#btn-${action}-${service}`).prop('disabled', true).text('Đang xử lý...');
+            $.ajax({
+                url: `/api/service/${service}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ action: action }),
+                success: function(res) {
+                    fetchStatus(service);
+                },
+                complete: function() {
+                    const originalText = action === 'start' ? (service === 'chatbot' ? 'Khởi động Server' : 'Chạy Update Data') : (service === 'chatbot' ? 'Dừng Server' : 'Ép dừng Update');
+                    $(`#btn-${action}-${service}`).text(originalText);
+                }
+            });
+        }
+		
+		function triggerUpdateServiceOnly() {
+            $('#backupModal').modal('hide');
+            manageService('updater', 'start');
+        }
+
+        function fetchStatus(service) {
+            $.get(`/api/service/${service}/status`, function(res) {
+                const statusBadge = $(`#status-${service}`);
+                const startBtn = $(`#btn-start-${service}`);
+                const stopBtn = $(`#btn-stop-${service}`);
+
+                if (res.running) {
+                    statusBadge.removeClass('bg-secondary bg-danger').addClass('bg-success').text('Trạng thái: Đang chạy (Running)');
+                    startBtn.prop('disabled', true);
+                    stopBtn.prop('disabled', false);
+                } else {
+                    statusBadge.removeClass('bg-secondary bg-success').addClass('bg-danger').text('Trạng thái: Đã dừng (Stopped)');
+                    startBtn.prop('disabled', false);
+                    stopBtn.prop('disabled', true);
+                }
+            });
+        }
+
+        function fetchLogs(service) {
+            $.get(`/api/service/${service}/logs`, function(res) {
+                const logBox = $(`#log-${service}`);
+                const currentText = logBox.text();
+                
+                // Chỉ render và cuộn nếu log có sự thay đổi
+                if (currentText !== res.logs) {
+                    logBox.text(res.logs);
+                    if (autoScroll[service]) {
+                        logBox.scrollTop(logBox[0].scrollHeight);
+                    }
+                }
+            });
+        }
+		
+		
+		// 2. Logic Quản lý Backup
+        function openBackupModal(mode) {
+            currentBackupMode = mode;
+            // Generate timestamp yyyyMMdd_HHmmss
+            const date = new Date();
+            const timestamp = date.getFullYear().toString() + 
+                (date.getMonth() + 1).toString().padStart(2, '0') + 
+                date.getDate().toString().padStart(2, '0') + '_' + 
+                date.getHours().toString().padStart(2, '0') + 
+                date.getMinutes().toString().padStart(2, '0') + 
+                date.getSeconds().toString().padStart(2, '0');
+
+            $('#backupName').val('blu_' + timestamp);
+            $('#backupDesc').val('');
+            
+            if(mode === 'update') {
+                $('#backupModalLabel').text("Bước 1: Backup Trước Khi Update");
+                $('#backupHelperText').text("Khuyến nghị: Bạn nên tạo bản sao lưu trước khi nạp dữ liệu mới để phòng ngừa rủi ro.");
+                $('#btnSkipBackup').show();
+                $('#btnSubmitBackup').text('Sao lưu & Chạy Update').off('click').on('click', submitBackup);
+            } else {
+                $('#backupModalLabel').text("Tạo Bản Sao Lưu Thủ Công");
+                $('#backupHelperText').text("");
+                $('#btnSkipBackup').hide();
+                $('#btnSubmitBackup').text('Lưu Backup').off('click').on('click', submitBackup);
+            }
+            
+            new bootstrap.Modal(document.getElementById('backupModal')).show();
+        }
+
+        function submitBackup() {
+            const btn = $('#btnSubmitBackup');
+            btn.prop('disabled', true).text('Đang xử lý...');
+
+            $.ajax({
+                url: '/api/backup',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ 
+                    name: $('#backupName').val(), 
+                    description: $('#backupDesc').val() 
+                }),
+                success: function(res) {
+                    bootstrap.Modal.getInstance(document.getElementById('backupModal')).hide();
+                    if(currentBackupMode === 'update') {
+                        manageService('updater', 'start');
+                    } else {
+                        alert(res.message);
+                        loadBackups();
+                    }
+                },
+                error: function(xhr) {
+                    // Nếu DB rỗng, cảnh báo và cho đi tiếp
+                    if(xhr.status === 400 && currentBackupMode === 'update') {
+                        if(confirm("Lỗi Backup: " + xhr.responseJSON.detail + "\n\nBạn có muốn bỏ qua bước Backup và chạy Cập nhật Vector luôn không?")) {
+                            bootstrap.Modal.getInstance(document.getElementById('backupModal')).hide();
+                            manageService('updater', 'start');
+                        }
+                    } else {
+                        alert("Lỗi: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Không xác định"));
+                    }
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                }
+            });
+        }
+
+        function loadBackups() {
+            $.get('/api/backup', function(data) {
+                const tbody = $('#backup-list-body');
+                tbody.empty();
+                
+                if(data.length === 0) {
+                    tbody.append('<tr><td colspan="4" class="text-muted text-center py-4">Chưa có bản sao lưu nào.</td></tr>');
+                    return;
+                }
+
+                data.forEach(item => {
+                    const row = `<tr>
+                        <td class="fw-bold text-primary">${item.name}</td>
+                        <td class="text-start">${item.description || '<i class="text-muted">Không có mô tả</i>'}</td>
+                        <td>${item.timestamp}</td>
+                        <td class="d-flex" style="flex-direction: row; justify-content: end;">
+                            <button class="btn btn-sm btn-primary me-2" onclick="restoreBackup('${item.name}')">Khôi phục</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteBackup('${item.name}')">Xóa</button>
+                        </td>
+                    </tr>`;
+                    tbody.append(row);
+                });
+            });
+        }
+
+        function restoreBackup(name) {
+            if(!confirm(`CẢNH BÁO: Hành động này sẽ GHI ĐÈ Database hiện tại!\n\nBạn nên backup phiên bản hiện tại trước khi khôi phục.\nBạn có chắc chắn muốn KHÔI PHỤC bản sao lưu "${name}" không?`)) return;
+            
+            $.ajax({
+                url: `/api/backup/${name}/restore`,
+                type: 'POST',
+                success: function(res) {
+                    alert(res.message);
+                },
+                error: function(xhr) {
+                    alert("Lỗi: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Không xác định"));
+                }
+            });
+        }
+
+        function deleteBackup(name) {
+            if(!confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN bản sao lưu "${name}"?`)) return;
+            
+            $.ajax({
+                url: `/api/backup/${name}`,
+                type: 'DELETE',
+                success: function(res) {
+                    loadBackups();
+                },
+                error: function(xhr) {
+                    alert("Lỗi: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Không xác định"));
+                }
+            });
+        }
+
+        function updateAll() {
+            ['chatbot', 'updater'].forEach(service => {
+                fetchStatus(service);
+                fetchLogs(service);
+            });
+        }
+		
+		// --- LOGIC CHO TAB FRAGMENT ---
+        let editorInstance = null;
+
+        // Khởi tạo CodeMirror ngay khi trang web tải xong
+        $(document).ready(function() {
+            editorInstance = CodeMirror.fromTextArea(document.getElementById("fragmentEditor"), {
+                mode: "htmlmixed",        // Nhận diện cú pháp HTML/CSS/JS
+                theme: "material-darker", // Phối màu Dark Theme cực đẹp
+                lineNumbers: true,        // Hiện số dòng bên trái
+                lineWrapping: true,       // Tự động xuống dòng nếu code quá dài
+                matchBrackets: true
+            });
+
+            // Bắt sự kiện mỗi khi người dùng gõ phím vào CodeMirror
+            editorInstance.on('change', function() {
+                updatePreview();
+            });
+            
+            // Fix lỗi CodeMirror không hiển thị đúng kích thước khi bị giấu trong Tab
+            $('button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+                if ($(e.target).attr("data-bs-target") === '#fragment-pane') {
+                    editorInstance.refresh();
+                }
+            });
+        });
+
+        function loadFragment() {
+            $.get('/api/fragment', function(data) {
+                // Dùng hàm của CodeMirror để nạp code từ server vào khung gõ
+                editorInstance.setValue(data.content || "");
+                updatePreview();
+            });
+        }
+
+        function updatePreview() {
+            // Lấy mã HTML từ CodeMirror thay vì $('#fragmentEditor').val()
+            let content = editorInstance.getValue();
+            
+            let localCSS = `
+                <style>
+                    #fragmentPreview { line-height: 1.5; }
+                    #fragmentPreview p { margin-top: 0; margin-bottom: 1rem; }
+                    #fragmentPreview ul.list-unstyled { list-style: none; padding-left: 0; margin-bottom: 1rem; }
+                    #fragmentPreview li { margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px;}
+                    #fragmentPreview .icon { flex-shrink: 0; }
+                </style>
+            `;
+            
+            $('#fragmentPreview').html(localCSS + content);
+            
+            const helloP = $('#fragmentPreview').find('#initHelloP');
+            if (helloP.length > 0) {
+                helloP.html('Xin chào <strong>Người Dùng Thử Nghiệm</strong>, bạn có thể hỏi tôi các thông tin về tuyển sinh.');
+            }
+        }
+
+        function saveFragment() {
+            const btn = $('#btn-save-fragment');
+            btn.prop('disabled', true).text('SAVING...');
+            
+            $.ajax({
+                url: '/api/fragment',
+                type: 'POST',
+                contentType: 'application/json',
+                // Lấy code từ CodeMirror để gửi lên server
+                data: JSON.stringify({ content: editorInstance.getValue() }),
+                success: function(res) {
+                    alert(res.message);
+                },
+                error: function(xhr) {
+                    alert("Lỗi: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Không xác định"));
+                },
+                complete: function() {
+                    btn.prop('disabled', false).text('SAVE FRAGMENT');
+                }
+            });
+        }
+
+
+        // --- LOGIC CHO TAB ENV ---
+        let envEditorInstance = null;
+
+        $(document).ready(function() {
+            // Khởi tạo CodeMirror cho .env (dùng mode properties)
+            envEditorInstance = CodeMirror.fromTextArea(document.getElementById("envEditor"), {
+                mode: "properties",
+                theme: "material-darker",
+                lineNumbers: true,
+                lineWrapping: true,
+                matchBrackets: true
+            });
+
+            // Xử lý refresh kích thước khi đổi Tab
+            $('button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+                if ($(e.target).attr("data-bs-target") === '#env-pane') {
+                    envEditorInstance.refresh();
+                }
+            });
+        });
+
+        function loadEnv() {
+            $.get('/api/env', function(data) {
+                envEditorInstance.setValue(data.content || "");
+            });
+        }
+
+        function saveEnv() {
+            const btn = $('#btn-save-env');
+            btn.prop('disabled', true).text('SAVING...');
+
+            $.ajax({
+                url: '/api/env',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ content: envEditorInstance.getValue() }),
+                success: function(res) {
+                    alert(res.message); // Hiển thị cảnh báo cần khởi động lại
+                },
+                error: function(xhr) {
+                    alert("Lỗi: " + (xhr.responseJSON ? xhr.responseJSON.detail : "Không xác định"));
+                },
+                complete: function() {
+                    btn.prop('disabled', false).text('SAVE .ENV');
+                }
+            });
+        }
+
+
+        autoScroll.prompt = true;
+
+        function fetchPromptLogs() {
+            $.get('/api/logs/prompt', function(res) {
+                const logBox = $('#log-prompt');
+                if (logBox.text() !== res.logs) {
+                    logBox.text(res.logs);
+                    if (autoScroll.prompt) {
+                        logBox.scrollTop(logBox[0].scrollHeight);
+                    }
+                }
+            });
+        }
+
+        function clearPromptLogs() {
+            if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử Prompt Log?")) return;
+            $.ajax({
+                url: '/api/logs/prompt',
+                type: 'DELETE',
+                success: function(res) {
+                    $('#log-prompt').text("");
+                    alert(res.message);
+                }
+            });
+        }
+
+        $(document).ready(function() {
+            updateAll();
+            setInterval(updateAll, 2000); // Lấy dữ liệu mỗi 2 giây
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Môi trường và Credentials
+.env
+google_credentials.json
+
+# Dữ liệu tài liệu (ngăn đưa data người dùng/tài liệu gốc lên Git)
+documentBL/
+documentBL_original/
+assets/
+
+# Database và Vector
+database/
+cleaned_chunks/
+extracted_json_data/
+
+# Logs và Cache
+logs/
+__pycache__/
+*.pyc
+*.pyo
+processed_files_cache.json
+report_log.txt
