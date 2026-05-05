@@ -20,7 +20,7 @@ DB_PATH = os.getenv("DATABASE_PATH", "database/collection")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "blu")
 DOC_DIR = os.getenv("DOC_DIR", "documentBL")
 SPARSE_EMBEDDINGS_MODEL_NAME = os.getenv("SPARSE_EMBEDDINGS_MODEL_NAME", "Qdrant/bm25")
-EMBEDDINGS_BATCH_SIZE = os.getenv("EMBEDDINGS_BATCH_SIZE", 500)
+EMBEDDINGS_BATCH_SIZE = int(os.getenv("EMBEDDINGS_BATCH_SIZE", 500))
 
 # === Logging setup ===
 logging.basicConfig(level=logging.INFO)
