@@ -255,23 +255,44 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let fullText = "";
-            const bubble = renderMsg("bot", `
+            let lastRenderTime = 0;
+			
+			const botRow = renderMsg("bot", `
 <div class="three-body">
     <div class="three-body__dot"></div>
     <div class="three-body__dot"></div>
     <div class="three-body__dot"></div>
-</div>
-            `).querySelector(".bubble");
-            let lastRenderTime = 0;
+</div>`);
+
+			const bubble = botRow.bubbleElement;
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 fullText += decoder.decode(value, { stream: true });
 
+                // 1. Tách Status cuối cùng ra
+                let currentStatus = "";
+                const statusRegex = /\[\[STATUS:(.*?)\]\]/g;
+                let match;
+                while ((match = statusRegex.exec(fullText)) !== null) {
+                    currentStatus = match[1]; 
+                }
+                
+                // 2. KỸ THUẬT QUAN TRỌNG: Xóa tag hoàn chỉnh VÀ tag đang bị cắt dở ở cuối chuỗi do stream
+                let displayText = fullText.replace(/\[\[STATUS:.*?\]\]/g, ""); // Xóa tag trọn vẹn
+                displayText = displayText.replace(/\[\[STATUS:[^\]]*$/, "");   // Xóa tag bị đứt ngang (VD: "[[STATUS:Đang...")
+
+                // 3. Cập nhật thẻ Status UI
+                if (currentStatus && botRow.statusElement) {
+                    botRow.statusElement.style.display = "inline-flex";
+                    botRow.statusElement.querySelector("span").textContent = currentStatus;
+                }
+
+                // 4. Render text an toàn
                 const now = Date.now();
                 if (now - lastRenderTime > 50) {
-                    let sanitizedText = fullText.replace(/<context>/gi, "dữ liệu").replace(/<\/context>/gi, "");
+                    let sanitizedText = displayText.replace(/<context>/gi, "dữ liệu").replace(/<\/context>/gi, "");
                     const rawHtml = window.marked ? marked.parse(sanitizedText) : sanitizedText;
                     bubble.innerHTML = DOMPurify.sanitize(rawHtml);
                     elements.body.scrollTop = elements.body.scrollHeight;
@@ -279,8 +300,19 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
                 }
             }
 
+            // KẾT THÚC STREAM: Ẩn thẻ trạng thái đi bằng cách set opacity mượt mà
+            if (botRow.statusElement) {
+                botRow.statusElement.style.opacity = "0";
+                setTimeout(() => { botRow.statusElement.style.display = "none"; }, 300);
+            }
+
             // ĐOẠN XỬ LÝ FORMAT CUỐI CÙNG SAU KHI STREAM XONG
-            let botText = fullText.replace(/<context>/gi, "dữ liệu").replace(/<\/context>/gi, "");
+            // [FIX] Bổ sung lệnh xóa sạch mọi tag STATUS trước khi chốt hạ nội dung
+            let botText = fullText.replace(/\[\[STATUS:[\s\S]*?\]\]/g, "")
+                                  .replace(/\[\[STATUS:[^\]]*$/, "")
+                                  .replace(/<context>/gi, "dữ liệu")
+                                  .replace(/<\/context>/gi, "");
+                                  
             let mathBlocks = [];
 
             botText = botText.replace(/(\\\[|\\\\\[)([\s\S]*?)(\\\]|\\\\\])/g, (match) => {
@@ -376,10 +408,29 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
             row.innerHTML += `<div class="avatar">👤</div>`;
         } else {
             row.innerHTML = `<div class="avatar bg-primary text-white">B</div>`;
+            
+            // 1. Tạo Wrapper
+            const wrapper = document.createElement("div");
+            wrapper.className = "bot-content-wrapper";
+
+            // 2. Tạo thẻ Badge trạng thái nổi phía trên
+            const statusDiv = document.createElement("div");
+            statusDiv.className = "status-badge";
+            // Thêm icon loading xoay xoay
+            statusDiv.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2V6M12 18V22M6 12H2M22 12H18M19.0711 4.92893L16.2426 7.75736M7.75736 16.2426L4.92893 19.0711M19.0711 19.0711L16.2426 16.2426M7.75736 7.75736L4.92893 4.92893" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> <span>Đang khởi tạo...</span>`;
+            statusDiv.style.display = "none"; // Ẩn lúc đầu
+
+            // 3. Tạo Bubble Chat
             const bubble = document.createElement("div");
             bubble.className = "bubble bot";
             bubble.innerHTML = text === "..." ? `<span class="typing">...</span>` : text;
-            row.appendChild(bubble);
+            
+            wrapper.appendChild(statusDiv);
+            wrapper.appendChild(bubble);
+            row.appendChild(wrapper);
+
+            row.statusElement = statusDiv;
+            row.bubbleElement = bubble;
         }
         
         elements.body.appendChild(row);

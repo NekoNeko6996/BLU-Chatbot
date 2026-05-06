@@ -266,6 +266,54 @@
     background-color: #F7D7DA;
 }
 
+/* Layout bọc cả Status và Bubble */
+.bot-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 85%;
+}
+
+.bot-content-wrapper .bubble.bot {
+    max-width: 100%; /* Reset lại max-width cho bubble con */
+}
+
+/* Thẻ nổi trạng thái xử lý */
+.status-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #2b6ef6;
+    background-color: #ffffff;
+    border: 1px solid #2b6ef6;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 0 8px rgba(43, 110, 246, 0.2);
+    animation: badgePulse 1.5s infinite;
+    z-index: 10;
+    transition: opacity 0.3s ease;
+}
+
+/* Icon xoay vòng trong thẻ trạng thái */
+.status-badge svg {
+    width: 14px;
+    height: 14px;
+    animation: spinIcon 1s linear infinite;
+}
+
+/* Hiệu ứng nhấp nháy viền nổi (Pulse) */
+@keyframes badgePulse {
+    0% { box-shadow: 0 0 0 0 rgba(43, 110, 246, 0.4); }
+    70% { box-shadow: 0 0 0 5px rgba(43, 110, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(43, 110, 246, 0); }
+}
+
+@keyframes spinIcon {
+    100% { transform: rotate(360deg); }
+}
 
 /**/
 /* From Uiverse.io by dovatgabriel */ 
