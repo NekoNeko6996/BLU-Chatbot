@@ -19,6 +19,8 @@ import gc
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+DAILY_REPORT_EMBEDER_DEVICE = os.getenv("DAILY_REPORT_EMBEDER_DEVICE", "cpu")
+
 VLLM_API_BASE = os.getenv("LLM_API_BASE")
 VLLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME")
 SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID")
@@ -166,11 +168,16 @@ def main():
     df_user_unique = df_user.sort_values('Thời gian').drop_duplicates(subset=['Email'], keep='last')
     
     # Vector Scoring để lọc nhiễu
-    embedder = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+    embedder = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', device= DAILY_REPORT_EMBEDER_DEVICE)
     query_vec = embedder.encode(["ngành điểm chuẩn xét tuyển học phí chỉ tiêu ký túc xá học bổng"])
     all_questions = df_chat['Câu hỏi'].fillna("").tolist()
     all_vecs = embedder.encode(all_questions, batch_size=128)
     df_chat['Score'] = cosine_similarity(query_vec, all_vecs)[0]
+
+    del embedder
+    del query_vec
+    del all_vecs
+    gc.collect()
     
     chat_grouped = (
         df_chat[df_chat['Score'] > 0.2]
