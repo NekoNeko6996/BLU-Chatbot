@@ -147,7 +147,7 @@
 }
 
 .chat-body { background-color: var(--bg-light); color: var(--text-color); }
-.msg { display: flex; align-items: flex-end; margin-bottom: 1rem; }
+.msg { display: flex; align-items: flex-start; margin-bottom: 1rem; }
 .msg.user { justify-content: flex-end; }
 .bubble { 
     padding: 0.6rem 1rem; border-radius: 1rem; max-width: 85%; font-size: 0.9rem; 
@@ -302,6 +302,36 @@
     width: 14px;
     height: 14px;
     animation: spinIcon 1s linear infinite;
+}
+
+/* footer chúa copy, like, dislike, time */
+.bot-footer {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: dimgrey;
+    margin: 8px 0;
+    display: inline-flex;
+    justify-content: center;
+    align-items: start;
+    gap: 20px;
+    z-index: 10;
+    transition: opacity 0.3s ease;
+}
+
+.bot-footer .footer-action-btn {
+    cursor: pointer;
+    border: none;
+    outline: none;
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.bot-footer .time {    
+    font-size: 0.7rem;
 }
 
 /* Hiệu ứng nhấp nháy viền nổi (Pulse) */

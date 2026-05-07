@@ -101,6 +101,8 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
     let userInfo = null;
 	let questionCount = 0;
     let sessionId = "web_" + Date.now();
+    let latestFullTextResponse = null;
+    let prevBotFooter = null;
 
     elements.toggle.onclick = () => {
         elements.wrapper.classList.toggle("show");
@@ -229,6 +231,8 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
         toggleLoading(true);
         abortController = new AbortController();
 
+        let botRow = null;
+
         try {
             const response = await fetch(`${API_BASE_URL}/chat_stream`, {
                 method: "POST",
@@ -257,14 +261,19 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
             let fullText = "";
             let lastRenderTime = 0;
 			
-			const botRow = renderMsg("bot", `
+            if(prevBotFooter) {
+                prevBotFooter.style.opacity = "0";
+                setTimeout(() => { prevBotFooter.style.display = "none"; }, 300);
+            }
+			botRow = renderMsg("bot", "");
+
+			const bubble = botRow.bubbleElement;
+            bubble.innerHTML = `
 <div class="three-body">
     <div class="three-body__dot"></div>
     <div class="three-body__dot"></div>
     <div class="three-body__dot"></div>
-</div>`);
-
-			const bubble = botRow.bubbleElement;
+</div>`;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -279,7 +288,7 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
                     currentStatus = match[1]; 
                 }
                 
-                // 2. KỸ THUẬT QUAN TRỌNG: Xóa tag hoàn chỉnh VÀ tag đang bị cắt dở ở cuối chuỗi do stream
+                // 2.  Xóa tag hoàn chỉnh VÀ tag đang bị cắt dở ở cuối chuỗi do stream
                 let displayText = fullText.replace(/\[\[STATUS:.*?\]\]/g, ""); // Xóa tag trọn vẹn
                 displayText = displayText.replace(/\[\[STATUS:[^\]]*$/, "");   // Xóa tag bị đứt ngang (VD: "[[STATUS:Đang...")
 
@@ -300,19 +309,14 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
                 }
             }
 
-            // KẾT THÚC STREAM: Ẩn thẻ trạng thái đi bằng cách set opacity mượt mà
-            if (botRow.statusElement) {
-                botRow.statusElement.style.opacity = "0";
-                setTimeout(() => { botRow.statusElement.style.display = "none"; }, 300);
-            }
 
             // ĐOẠN XỬ LÝ FORMAT CUỐI CÙNG SAU KHI STREAM XONG
-            // [FIX] Bổ sung lệnh xóa sạch mọi tag STATUS trước khi chốt hạ nội dung
             let botText = fullText.replace(/\[\[STATUS:[\s\S]*?\]\]/g, "")
                                   .replace(/\[\[STATUS:[^\]]*$/, "")
                                   .replace(/<context>/gi, "dữ liệu")
                                   .replace(/<\/context>/gi, "");
-                                  
+
+
             let mathBlocks = [];
 
             botText = botText.replace(/(\\\[|\\\\\[)([\s\S]*?)(\\\]|\\\\\])/g, (match) => {
@@ -323,6 +327,8 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
                 mathBlocks.push(match);
                 return `@@MATH_BLOCK_${mathBlocks.length - 1}@@`;
             });
+
+            latestFullTextResponse = botText;
 
             let rawHtmlFinal = window.marked ? marked.parse(botText) : botText;
 
@@ -375,6 +381,20 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
             }
         } finally {
             toggleLoading(false);
+            if (botRow) {
+                if (botRow.statusElement) {
+                    botRow.statusElement.style.opacity = "0";
+                    setTimeout(() => { botRow.statusElement.style.display = "none"; }, 300);
+                }
+
+                // element button copy, like, dislike, time stamp
+                if (botRow.footerElement) {
+                     botRow.footerElement.style.opacity = "1";
+                     setTimeout(() => { botRow.footerElement.style.display = "inline-flex"; }, 300);
+                }
+
+                prevBotFooter = botRow.footerElement;
+            }
         }
     }
 
@@ -394,6 +414,17 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
             elements.wrapper.classList.add("show");
         }
         handleSend(text);
+    };
+
+    window.copyToClipboard = function(element) {
+        navigator.clipboard.writeText(latestFullTextResponse)
+            .then(() => {
+                console.log("Đã copy thành công!");
+                // Có thể thêm code đổi icon thành dấu check tại đây sau...
+            })
+            .catch(err => {
+                console.error("Lỗi copy: ", err);
+            });
     };
 
     function renderMsg(type, text) {
@@ -423,20 +454,49 @@ function initChatbotLogic(shadow, API_BASE_URL, fragmentContent, MAX_QUESTION_IN
             // 3. Tạo Bubble Chat
             const bubble = document.createElement("div");
             bubble.className = "bubble bot";
-            bubble.innerHTML = text === "..." ? `<span class="typing">...</span>` : text;
+            bubble.innerHTML = text;
+
+            // 4. Tạo footer chứa copy, like, dislike, time
+            const footer = document.createElement("div");
+            footer.style.opacity = "0";
+            footer.style.display = "none";
+            footer.className = "bot-footer";
+            footer.innerHTML = `
+<button class="footer-action-btn" onclick="copyToClipboard(this)">
+    <svg width="26px" height="26px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M19.5 16.5L19.5 4.5L18.75 3.75H9L8.25 4.5L8.25 7.5L5.25 7.5L4.5 8.25V20.25L5.25 21H15L15.75 20.25V17.25H18.75L19.5 16.5ZM15.75 15.75L15.75 8.25L15 7.5L9.75 7.5V5.25L18 5.25V15.75H15.75ZM6 9L14.25 9L14.25 19.5L6 19.5L6 9Z" fill="#696969"/>
+    </svg>
+</button>
+<!--
+<button class="footer-action-btn">
+    <svg width="30px" height="30px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M15.0501 7.04419C15.4673 5.79254 14.5357 4.5 13.2163 4.5C12.5921 4.5 12.0062 4.80147 11.6434 5.30944L8.47155 9.75H5.85748L5.10748 10.5V18L5.85748 18.75H16.8211L19.1247 14.1428C19.8088 12.7747 19.5406 11.1224 18.4591 10.0408C17.7926 9.37439 16.8888 9 15.9463 9H14.3981L15.0501 7.04419ZM9.60751 10.7404L12.864 6.1813C12.9453 6.06753 13.0765 6 13.2163 6C13.5118 6 13.7205 6.28951 13.627 6.56984L12.317 10.5H15.9463C16.491 10.5 17.0133 10.7164 17.3984 11.1015C18.0235 11.7265 18.1784 12.6814 17.7831 13.472L15.8941 17.25H9.60751V10.7404ZM8.10751 17.25H6.60748V11.25H8.10751V17.25Z" fill="#696969"/>
+    </svg>
+</button>
+<button class="footer-action-btn">
+    <svg width="30px" height="30px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M15.0501 16.9558C15.4673 18.2075 14.5357 19.5 13.2164 19.5C12.5921 19.5 12.0063 19.1985 11.6435 18.6906L8.47164 14.25L5.85761 14.25L5.10761 13.5L5.10761 6L5.85761 5.25L16.8211 5.25L19.1247 9.85722C19.8088 11.2253 19.5407 12.8776 18.4591 13.9592C17.7927 14.6256 16.8888 15 15.9463 15L14.3982 15L15.0501 16.9558ZM9.60761 13.2596L12.8641 17.8187C12.9453 17.9325 13.0765 18 13.2164 18C13.5119 18 13.7205 17.7105 13.6271 17.4302L12.317 13.5L15.9463 13.5C16.491 13.5 17.0133 13.2836 17.3984 12.8985C18.0235 12.2735 18.1784 11.3186 17.7831 10.528L15.8941 6.75L9.60761 6.75L9.60761 13.2596ZM8.10761 6.75L6.60761 6.75L6.60761 12.75L8.10761 12.75L8.10761 6.75Z" fill="#696969"/>
+    </svg>
+</button>
+-->
+<p>${new Date()}</p>
+            `;
             
             wrapper.appendChild(statusDiv);
             wrapper.appendChild(bubble);
+            wrapper.appendChild(footer);
             row.appendChild(wrapper);
 
             row.statusElement = statusDiv;
             row.bubbleElement = bubble;
+            row.footerElement = footer;
         }
         
         elements.body.appendChild(row);
         elements.body.scrollTop = elements.body.scrollHeight;
         return row;
     }
+
 
     function toggleLoading(isLoading) {
         elements.sendBtn.classList.toggle("d-none", isLoading);

@@ -54,8 +54,6 @@ cors_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() == "true"
 cors_methods = [x.strip() for x in os.getenv("CORS_ALLOW_METHODS", "GET,POST").split(",") if x.strip()]
 cors_headers = [x.strip() for x in os.getenv("CORS_ALLOW_HEADERS", "*").split(",") if x.strip()]
 
-set_llm_cache(SQLiteCache(database_path="logs/llm_cache.db"))
-
 GG_CRED_FILE = os.getenv("GOOGLE_SHEETS_CRED_FILE", "google_credentials.json")
 GG_SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID")
 
@@ -84,6 +82,8 @@ ASSETS_DIR = os.getenv("ASSETS_DIR", "assets")
 LOG_DIR = os.getenv("LOG_DIR", "logs")
 
 # ========== LOGGING ==========
+LANGCHAIN_DEBUG = os.getenv("LANGCHAIN_DEBUG", "false").lower() == "true"
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -275,14 +275,19 @@ def router_node(state: AgentState):
     """Quyết định xem có gọi tool hay không dựa trên câu hỏi MỚI NHẤT, bỏ qua lịch sử để tránh bị nhiễu."""
     last_user_message = state["messages"][-1].content
     
-    sys_msg = SystemMessage(content=f"""Bạn là bộ định tuyến (Router) tìm kiếm của ĐH Bạc Liêu.
-Nhiệm vụ: QUYẾT ĐỊNH CÓ GỌI CÔNG CỤ TÌM KIẾM HAY KHÔNG cho câu hỏi này: "{last_user_message}"
+    sys_msg = SystemMessage(content="""Bạn là bộ định tuyến (Router) tìm kiếm của ĐH Bạc Liêu.
+Nhiệm vụ: Phân tích lịch sử hội thoại và ra quyết định xử lý.
 
-QUY TẮC CỐT LÕI:
-1. Luôn luôn gọi tool dù bạn nghĩ bạn đã biết câu trả lời.
-2. KHÔNG TỰ SUY LUẬN.
-3. Tham số 'query' truyền vào tool phải là Tiếng Việt có dấu đầy đủ, quy đổi "năm nay/hiện tại" thành "năm 2026".
+QUY TẮC ĐỊNH TUYẾN:
+1. KHÔNG GỌI TOOL: Nếu tin nhắn mới nhất chỉ là lời chào hỏi xã giao (Xin chào, hello), lời cảm ơn, hoặc câu hỏi không mang tính chất tìm kiếm thông tin (VD: "Bạn là ai?"). Bạn hãy tự sinh câu trả lời trực tiếp.
+2. BẮT BUỘC GỌI TOOL: Nếu người dùng hỏi bất kỳ thông tin nào về ĐH Bạc Liêu (tuyển sinh, điểm chuẩn, ngành học, học phí...). Tuyệt đối không tự bịa thông tin.
+
+QUY TẮC VIẾT LẠI CÂU HỎI (NẾU GỌI TOOL):
+1. Tham số 'query' truyền vào tool PHẢI LÀ MỘT CÂU ĐỘC LẬP, ĐẦY ĐỦ Ý NGHĨA bằng TIẾNG VIỆT có dấu đầy đủ.
+2. Nếu câu hỏi hiện tại bị ẩn chủ ngữ (VD: "Điểm chuẩn bao nhiêu?"), bạn PHẢI tự động lấy chủ ngữ/ngành học từ các tin nhắn trước đó và năm hiện tại ghép vào (VD: "Điểm chuẩn ngành CNTT năm 2026 bao nhiêu?").
+3. KHÔNG TỰ TRẢ LỜI CÂU HỎI.
 """)
+
     # CHỈ đưa câu hỏi cuối cùng vào để LLM quyết định tool, không đưa toàn bộ state["messages"]
     messages = [sys_msg, state["messages"][-1]]
     response = llm_with_tools.invoke(messages)
@@ -355,13 +360,25 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
         full_answer = ""
         try:
             async for event in app_graph.astream_events(inputs, version="v2"):
+                if await request.is_disconnected():
+                    break
+
                 kind = event["event"]
                 name = event["name"]
+
+                if LANGCHAIN_DEBUG:
+                    # ---  IN LOG RA CONSOLE ---
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Event: {kind} | Node: {name}")
+                    if kind == "on_chat_model_stream":
+                        chunk_content = event["data"]["chunk"].content
+                        if chunk_content:
+                            print(f"Chunk ({name}): {chunk_content}", end="", flush=True)
+                    # ---------------------------------------------
 
                 # 1. BẮT SỰ KIỆN ĐỂ PHÁT TRẠNG THÁI
                 if kind == "on_chain_start":
                     if name == "router":
-                        yield "[[STATUS:Đang phân tích yêu cầu...]]"
+                        yield "[[STATUS:Đang phân tích...]]"
                     elif name == "tools":
                         yield "[[STATUS:Đang tra cứu...]]"
                     elif name == "generate":
@@ -375,10 +392,16 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
                         yield chunk.content
                         await asyncio.sleep(0.01)
 
-            # Cập nhật lịch sử session sau khi hoàn thành
-            session_history.add_user_message(user_msg)
-            session_history.add_ai_message(full_answer)
-
+            if LANGCHAIN_DEBUG: 
+                print("\n--- KẾT THÚC LUỒNG STREAM ---")
+            
+            if full_answer.strip() and not await request.is_disconnected():
+                session_history.add_user_message(user_msg)
+                session_history.add_ai_message(full_answer)
+            else:
+                logger.warning(f"Bỏ qua lưu lịch sử do AI trả về chuỗi rỗng. Session: {session_id}")
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"Stream error: {e}", exc_info=True)
             yield f"\n[Lỗi hệ thống: {str(e)}]"
