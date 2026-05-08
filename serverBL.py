@@ -305,7 +305,8 @@ def generate_node(state: AgentState):
 QUY TẮC CỐT LÕI:
 1. CHỈ SỬ DỤNG DUY NHẤT TIẾNG VIỆT.
 2. Trả lời ngắn gọn, thẳng thắn, đúng trọng tâm. Bỏ qua các từ xã giao dài dòng.
-3. Dựa HOÀN TOÀN vào dữ liệu được cung cấp từ ngữ cảnh. Nếu không có thông tin, hãy nói thẳng: "Hiện tại chưa có thông tin về vấn đề này."
+3. Dựa HOÀN TOÀN vào dữ liệu được cung cấp từ ngữ cảnh, TUYỆT ĐỐI KHÔNG TỰ BỊA ĐẶT THÊM ĐƯỜNG LINK (URL), email hay số điện thoại nếu trong ngữ cảnh không chứa thông tin đó.
+4. Nếu không có thông tin, hãy nói thẳng: "Hiện tại chưa có thông tin về vấn đề này."
 """)
     messages = [sys_msg] + state["messages"]
     response = main_llm.invoke(messages)
