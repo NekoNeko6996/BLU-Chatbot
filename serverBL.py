@@ -69,6 +69,7 @@ SEARCH_KWARGS = int(os.getenv("SEARCH_KWARGS", 20))
 MAX_CHAT_RESPONSE_TOKEN = int(os.getenv("MAX_CHAT_RESPONSE_TOKEN", 2048))
 RETRIEVER_MODEL_KWARGS_DEVICE = os.getenv("RETRIEVER_MODEL_KWARGS_DEVICE", "cpu")
 
+LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "qwen2.5:14b")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "http://localhost:11434/v1")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.0))
@@ -224,7 +225,7 @@ def setup_llm():
     local_llm = ChatOpenAI(
         model_name=LLM_MODEL_NAME,
         openai_api_base=LLM_API_BASE,
-        openai_api_key="ollama",                     
+        openai_api_key=LLM_API_KEY,                     
         temperature=LLM_TEMPERATURE,
         max_tokens=MAX_CHAT_RESPONSE_TOKEN,
         top_p=LLM_TOP_P,
@@ -271,56 +272,38 @@ llm_with_tools = main_llm.bind_tools(tools)
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
-def router_node(state: AgentState):
-    """Quyết định xem có gọi tool hay không dựa trên câu hỏi MỚI NHẤT, bỏ qua lịch sử để tránh bị nhiễu."""
-    last_user_message = state["messages"][-1].content
-    
-    sys_msg = SystemMessage(content="""Bạn là bộ định tuyến (Router) tìm kiếm của ĐH Bạc Liêu.
-Nhiệm vụ: Phân tích lịch sử hội thoại và ra quyết định xử lý.
-
-QUY TẮC ĐỊNH TUYẾN:
-1. KHÔNG GỌI TOOL: Nếu tin nhắn mới nhất chỉ là lời chào hỏi xã giao (Xin chào, hello), lời cảm ơn, hoặc câu hỏi không mang tính chất tìm kiếm thông tin (VD: "Bạn là ai?"). Bạn hãy tự sinh câu trả lời trực tiếp.
-2. BẮT BUỘC GỌI TOOL: Nếu người dùng hỏi bất kỳ thông tin nào về ĐH Bạc Liêu (tuyển sinh, điểm chuẩn, ngành học, học phí...). Tuyệt đối không tự bịa thông tin.
-
-QUY TẮC VIẾT LẠI CÂU HỎI (NẾU GỌI TOOL):
-1. Tham số 'query' truyền vào tool PHẢI LÀ MỘT CÂU ĐỘC LẬP, ĐẦY ĐỦ Ý NGHĨA bằng TIẾNG VIỆT có dấu đầy đủ.
-2. Nếu câu hỏi hiện tại bị ẩn chủ ngữ (VD: "Điểm chuẩn bao nhiêu?"), bạn PHẢI tự động lấy chủ ngữ/ngành học từ các tin nhắn trước đó và năm hiện tại ghép vào (VD: "Điểm chuẩn ngành CNTT năm 2026 bao nhiêu?").
-3. KHÔNG TỰ TRẢ LỜI CÂU HỎI.
+def agent_node(state: AgentState):
+    """Đọc toàn bộ lịch sử, quyết định gọi tool hoặc sinh câu trả lời cuối cùng."""
+    sys_msg = SystemMessage(content="""Bạn là chuyên viên tư vấn tuyển sinh của Đại học Bạc Liêu (BLU).
+QUY TẮC:
+1. CHỈ SỬ DỤNG TIẾNG VIỆT. Trả lời ngắn gọn, đúng trọng tâm.
+2. NẾU CẦN TÌM THÔNG TIN hãy sử dụng công cụ tìm kiếm được cung cấp.
+3. KHI GỌI CÔNG CỤ: Chỉ xuất ra định dạng gọi công cụ. TUYỆT ĐỐI KHÔNG sinh ra bất kỳ văn bản thông thường nào đi kèm.
+4. Nếu không tìm thấy thông tin từ công cụ, hãy nói rõ: "Hiện tại chưa có thông tin về vấn đề này". Tuyệt đối không tự bịa thông tin, URL, SĐT.
+5. Nếu câu hỏi không liên quan đến vấn đề tuyển sinh, việc làm sau tốt nghiệp mà liên quan đến các chủ đề khác như cuộc sống, thời tiết, nấu nướng, tâm lý,... thì nên từ chối trả lời lịch sự và không cần gọi tool tìm kiếm.
+6. Sử dụng cách gọi "Mình" - "Bạn".
 """)
-
-    # CHỈ đưa câu hỏi cuối cùng vào để LLM quyết định tool, không đưa toàn bộ state["messages"]
-    messages = [sys_msg, state["messages"][-1]]
+    # Đưa toàn bộ lịch sử (bao gồm cả kết quả từ tool) vào LLM
+    messages = [sys_msg] + state["messages"]
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
-def should_continue(state: AgentState) -> Literal["tools", "generate"]:
+def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+    """Kiểm tra xem LLM có muốn gọi tool không."""
     last_message = state["messages"][-1]
     if last_message.tool_calls:
         return "tools"
-    return "generate"
-
-def generate_node(state: AgentState):
-    """Tổng hợp câu trả lời cuối cùng để trả về user."""
-    sys_msg = SystemMessage(content="""Bạn là chuyên viên tư vấn tuyển sinh của Đại học Bạc Liêu (BLU). 
-QUY TẮC CỐT LÕI:
-1. CHỈ SỬ DỤNG DUY NHẤT TIẾNG VIỆT.
-2. Trả lời ngắn gọn, thẳng thắn, đúng trọng tâm. Bỏ qua các từ xã giao dài dòng.
-3. Dựa HOÀN TOÀN vào dữ liệu được cung cấp từ ngữ cảnh, TUYỆT ĐỐI KHÔNG TỰ BỊA ĐẶT THÊM ĐƯỜNG LINK (URL), email hay số điện thoại nếu trong ngữ cảnh không chứa thông tin đó.
-4. Nếu không có thông tin, hãy nói thẳng: "Hiện tại chưa có thông tin về vấn đề này."
-""")
-    messages = [sys_msg] + state["messages"]
-    response = main_llm.invoke(messages)
-    return {"messages": [response]}
+    return "__end__"
 
 workflow = StateGraph(AgentState)
-workflow.add_node("router", router_node)
+workflow.add_node("agent", agent_node)
 workflow.add_node("tools", ToolNode(tools))
-workflow.add_node("generate", generate_node)
 
-workflow.add_edge(START, "router")
-workflow.add_conditional_edges("router", should_continue)
-workflow.add_edge("tools", "generate")
-workflow.add_edge("generate", END)
+workflow.add_edge(START, "agent")
+# Nếu có tool -> sang node tools. Nếu không -> KẾT THÚC
+workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "__end__": END})
+# Sau khi tool chạy xong, BẮT BUỘC quay lại agent để tổng hợp câu trả lời cho user
+workflow.add_edge("tools", "agent")
 
 app_graph = workflow.compile()
 
@@ -378,17 +361,19 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
 
                 # 1. BẮT SỰ KIỆN ĐỂ PHÁT TRẠNG THÁI
                 if kind == "on_chain_start":
-                    if name == "router":
+                    if name == "agent":
                         yield "[[STATUS:Đang phân tích...]]"
                     elif name == "tools":
                         yield "[[STATUS:Đang tra cứu...]]"
-                    elif name == "generate":
-                        yield "[[STATUS:Đang tổng hợp câu trả lời...]]"
 
                 # 2. PHÁT NỘI DUNG VĂN BẢN TRẢ LỜI
-                if kind == "on_chat_model_stream" and event["metadata"].get("langgraph_node") == "generate":
+                if kind == "on_chat_model_stream" and event["metadata"].get("langgraph_node") == "agent":
                     chunk = event["data"]["chunk"]
-                    if chunk.content:
+
+                    if chunk.tool_call_chunks:
+                        continue
+
+                    if chunk.content: # Chỉ lấy nội dung văn bản trực tiếp
                         full_answer += chunk.content
                         yield chunk.content
                         await asyncio.sleep(0.01)
