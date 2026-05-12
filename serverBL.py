@@ -41,6 +41,7 @@ from langchain_ollama import ChatOllama
 from langgraph.graph.message import AnyMessage, add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 from rag_core import process_and_upsert_file
 
@@ -286,8 +287,9 @@ QUY TẮC:
 6. Nếu câu hỏi không liên quan đến vấn đề tuyển sinh, việc làm sau tốt nghiệp mà liên quan đến các chủ đề khác như cuộc sống, thời tiết, nấu nướng, tâm lý,... thì nên từ chối trả lời lịch sự và không cần gọi tool tìm kiếm.
 7. Sử dụng cách gọi "Mình" - "Bạn".
 """)
-    # Đưa toàn bộ lịch sử (bao gồm cả kết quả từ tool) vào LLM
-    messages = [sys_msg] + state["messages"]
+    recent_messages = state["messages"][-(MAX_CHAT_HISTORY * 2):]
+    messages = [sys_msg] + recent_messages
+    
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
@@ -308,7 +310,8 @@ workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "__e
 # Sau khi tool chạy xong, BẮT BUỘC quay lại agent để tổng hợp câu trả lời cho user
 workflow.add_edge("tools", "agent")
 
-app_graph = workflow.compile()
+memory = MemorySaver()
+app_graph = workflow.compile(checkpointer=memory)
 
 # ========== API ROUTES ==========
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
@@ -338,15 +341,16 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
     if not user_msg.strip():
         raise HTTPException(status_code=400, detail="Tin nhắn không được để trống")
 
-    session_history = get_session_history(session_id)
+    # LangGraph sẽ tự động lấy lịch sử cũ dựa vào thread_id
+    config = {"configurable": {"thread_id": session_id}}
     
-    # Nạp lịch sử vào Graph Input
-    inputs = {"messages": session_history.messages + [HumanMessage(content=user_msg)]}
+    # Chỉ truyền tin nhắn mới nhất vào
+    inputs = {"messages": [HumanMessage(content=user_msg)]}
 
     async def stream_generator():
         full_answer = ""
         try:
-            async for event in app_graph.astream_events(inputs, version="v2"):
+            async for event in app_graph.astream_events(inputs, config=config, version="v2"):
                 if await request.is_disconnected():
                     break
 
@@ -384,11 +388,6 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
             if LANGCHAIN_DEBUG: 
                 print("\n--- KẾT THÚC LUỒNG STREAM ---")
             
-            if full_answer.strip() and not await request.is_disconnected():
-                session_history.add_user_message(user_msg)
-                session_history.add_ai_message(full_answer)
-            else:
-                logger.warning(f"Bỏ qua lưu lịch sử do AI trả về chuỗi rỗng. Session: {session_id}")
         except asyncio.CancelledError:
             raise
         except Exception as e:
