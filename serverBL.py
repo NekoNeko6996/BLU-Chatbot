@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from typing import Annotated, List, Dict, Any, Literal, TypedDict
 from logging.handlers import RotatingFileHandler
+from qdrant_client import QdrantClient
 
 # FastAPI & Core
 from fastapi import FastAPI, HTTPException, Request, Depends, Security, BackgroundTasks
@@ -41,6 +42,8 @@ from langgraph.graph.message import AnyMessage, add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
+from rag_core import process_and_upsert_file
+
 # Google Sheets
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -57,7 +60,7 @@ cors_headers = [x.strip() for x in os.getenv("CORS_ALLOW_HEADERS", "*").split(",
 GG_CRED_FILE = os.getenv("GOOGLE_SHEETS_CRED_FILE", "google_credentials.json")
 GG_SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID")
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "database/collection")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "blu")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
 EMBENDDING_MODEL_KWARGS_DEVICE = os.getenv("EMBENDDING_MODEL_KWARGS_DEVICE", "cpu")
@@ -203,8 +206,7 @@ def setup_ggsheet():
 # ========== CẤU HÌNH AI & RAG ==========
 def setup_vector_store():
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL, model_kwargs={'device': EMBENDDING_MODEL_KWARGS_DEVICE}, encode_kwargs={'normalize_embeddings': True})
-    from qdrant_client import QdrantClient
-    client = QdrantClient(path=DATABASE_PATH)
+    client = QdrantClient(url=QDRANT_URL)
     sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
     return QdrantVectorStore(client=client, collection_name=COLLECTION_NAME, embedding=embeddings, sparse_embedding=sparse_embeddings, retrieval_mode=RetrievalMode.HYBRID)
 
@@ -278,10 +280,11 @@ def agent_node(state: AgentState):
 QUY TẮC:
 1. CHỈ SỬ DỤNG TIẾNG VIỆT. Trả lời ngắn gọn, đúng trọng tâm.
 2. NẾU CẦN TÌM THÔNG TIN hãy sử dụng công cụ tìm kiếm được cung cấp.
-3. KHI GỌI CÔNG CỤ: Chỉ xuất ra định dạng gọi công cụ. TUYỆT ĐỐI KHÔNG sinh ra bất kỳ văn bản thông thường nào đi kèm.
-4. Nếu không tìm thấy thông tin từ công cụ, hãy nói rõ: "Hiện tại chưa có thông tin về vấn đề này". Tuyệt đối không tự bịa thông tin, URL, SĐT.
-5. Nếu câu hỏi không liên quan đến vấn đề tuyển sinh, việc làm sau tốt nghiệp mà liên quan đến các chủ đề khác như cuộc sống, thời tiết, nấu nướng, tâm lý,... thì nên từ chối trả lời lịch sự và không cần gọi tool tìm kiếm.
-6. Sử dụng cách gọi "Mình" - "Bạn".
+3. TUYỆT ĐỐI KHÔNG thông báo hành động trước khi gọi tool (VD: Không nói "Mình sẽ tra cứu...", "Vui lòng đợi...", "Dựa theo lịch sử..."). Nếu cần dùng công cụ, HÃY CHỈ XUẤT TRỰC TIẾP CÚ PHÁP GỌI TOOL mà không kèm theo bất kỳ văn bản/câu từ nào khác.
+4. Nếu dữ liệu có sự mâu thuẫn, hãy sữ ưu tiên dữ liệu có version cao hơn.
+5. Nếu không tìm thấy thông tin từ công cụ, hãy nói rõ: "Hiện tại chưa có thông tin về vấn đề này". Tuyệt đối không tự bịa thông tin, URL, SĐT.
+6. Nếu câu hỏi không liên quan đến vấn đề tuyển sinh, việc làm sau tốt nghiệp mà liên quan đến các chủ đề khác như cuộc sống, thời tiết, nấu nướng, tâm lý,... thì nên từ chối trả lời lịch sự và không cần gọi tool tìm kiếm.
+7. Sử dụng cách gọi "Mình" - "Bạn".
 """)
     # Đưa toàn bộ lịch sử (bao gồm cả kết quả từ tool) vào LLM
     messages = [sys_msg] + state["messages"]

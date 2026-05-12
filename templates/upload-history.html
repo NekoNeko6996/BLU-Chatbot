@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Lịch sử cập nhật Vector - BLU Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --gcp-bg: #0f1012;
+            --gcp-surface: #1e1f21;
+            --gcp-primary: #a8c7fa;
+            --gcp-border: #3c4043;
+            --diff-add: rgba(129, 201, 149, 0.15);
+            --diff-del: rgba(242, 139, 130, 0.15);
+        }
+        body { background-color: var(--gcp-bg); color: #e3e3e3; font-family: 'Roboto', sans-serif; }
+        .card { background-color: var(--gcp-surface); border: 1px solid var(--gcp-border); margin-bottom: 20px; }
+        .version-badge { background: #3c4043; color: var(--gcp-primary); border: 1px solid var(--gcp-primary); padding: 2px 8px; border-radius: 4px; font-family: monospace; }
+        
+        /* Diff Styles */
+        .diff-added { border-left: 4px solid #81c995; background: var(--diff-add); padding: 10px; margin-bottom: 5px; border-radius: 0 4px 4px 0; font-size: 13px; white-space: pre-wrap; }
+        .diff-deleted { border-left: 4px solid #f28b82; background: var(--diff-del); padding: 10px; margin-bottom: 5px; border-radius: 0 4px 4px 0; font-size: 13px; text-decoration: line-through; color: #f28b82; white-space: pre-wrap; }
+        .diff-header { font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; color: #9aa0a6; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark border-bottom border-secondary mb-4">
+        <div class="container-fluid px-4">
+            <span class="navbar-brand h1"><i class="bi bi-clock-history text-primary me-2"></i> Lịch sử cập nhật dữ liệu</span>
+            <a href="/" class="btn btn-outline-light btn-sm">Quay lại Admin</a>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <div id="historyList">
+            <div class="text-center mt-5"><div class="spinner-border text-primary"></div></div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        function loadHistory() {
+            $.get('/api/upload-history', function(data) {
+                const container = $('#historyList').empty();
+                if (data.length === 0) {
+                    container.html('<div class="alert alert-dark text-center">Chưa có lịch sử cập nhật nào.</div>');
+                    return;
+                }
+
+                data.forEach((entry, idx) => {
+                    let addedHtml = entry.changes.added.map(t => `<div class="diff-added">${t}</div>`).join('');
+                    let deletedHtml = entry.changes.deleted.map(t => `<div class="diff-deleted">${t}</div>`).join('');
+
+                    container.append(`
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center border-secondary py-3">
+                                <div>
+                                    <span class="text-muted small me-2">${entry.timestamp}</span>
+                                    <strong class="fs-5">${entry.file_name}</strong>
+                                </div>
+                                <span class="version-badge">VERSION ${entry.version}</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center mb-4">
+                                    <div class="col-4 border-end border-secondary">
+                                        <div class="text-muted small">TỔNG CHUNK</div>
+                                        <div class="fs-4 fw-bold">${entry.stats.total}</div>
+                                    </div>
+                                    <div class="col-4 border-end border-secondary">
+                                        <div class="text-success small">MỚI (ADDED)</div>
+                                        <div class="fs-4 fw-bold text-success">+${entry.stats.added}</div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="text-danger small">XÓA (DELETED)</div>
+                                        <div class="fs-4 fw-bold text-danger">-${entry.stats.deleted}</div>
+                                    </div>
+                                </div>
+
+                                <div class="diff-container">
+                                    ${entry.changes.deleted.length > 0 ? `<div class="diff-header text-danger">Dữ liệu đã bị xóa:</div>${deletedHtml}` : ''}
+                                    ${entry.changes.added.length > 0 ? `<div class="diff-header text-success mt-3">Dữ liệu mới thêm vào:</div>${addedHtml}` : ''}
+                                    ${entry.changes.added.length === 0 && entry.changes.deleted.length === 0 ? '<div class="text-muted text-center py-2 italic small">Nội dung không thay đổi (Chỉ cập nhật version)</div>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                });
+            });
+        }
+        $(document).ready(loadHistory);
+    </script>
+</body>
+</html>

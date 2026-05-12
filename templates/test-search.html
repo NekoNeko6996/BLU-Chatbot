@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm thử Vector Search - BLU Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+			--gcp-bg: #0f1012; /* Nền tối sâu hơn */
+			--gcp-surface: #1e1f21; 
+			--gcp-primary: #a8c7fa; /* Xanh sáng hơn */
+			--gcp-text: #e3e3e3; /* Trắng xám rõ nét */
+			--gcp-text-muted: #bdc1c6; /* Chữ phụ sáng hơn bản cũ (#9aa0a6) */
+			--gcp-border: #3c4043;
+		}
+        body { background-color: var(--gcp-bg); color: var(--gcp-text); font-family: 'Roboto', sans-serif; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9aa0a6; }
+
+        .card { background-color: var(--gcp-surface); border: 1px solid var(--gcp-border); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .form-control { background-color: #303134; border: 1px solid #5f6368; color: white; }
+        .form-control:focus { background-color: #303134; color: white; border-color: var(--gcp-primary); box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2); }
+        
+        /* Box chứa Chunk Content */
+        .chunk-box { 
+            background-color: #000; 
+            padding: 16px; 
+            border-radius: 6px; 
+            font-size: 13px; 
+            line-height: 1.6; 
+            overflow: auto; 
+            white-space: pre; /* Giữ nguyên định dạng để bảng Markdown không bị gãy */
+            font-family: 'Consolas', 'Courier New', monospace; /* Bắt buộc font code để bảng thẳng hàng */
+            color: #81c995; /* Màu xanh lá dễ nhìn như terminal */
+            border: 1px solid var(--gcp-border);
+        }
+
+        /* Box chứa Metadata */
+        .metadata-box {
+            background-color: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--gcp-border);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+        .metadata-row {
+            display: flex;
+            font-size: 13px;
+            margin-bottom: 6px;
+            border-bottom: 1px dashed rgba(255,255,255,0.1);
+            padding-bottom: 4px;
+        }
+        .metadata-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .meta-key{ color: var(--gcp-text-muted); width: 140px; flex-shrink: 0; font-weight: 500; text-transform: uppercase; font-size: 11px; margin-top: 2px;}
+        .meta-value { color: var(--gcp-primary); font-family: 'Consolas', monospace; word-break: break-all; }
+        
+        .score-badge {
+            padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid;
+        }
+        .score-high { color: #81c995; border-color: #81c995; }
+        .score-med { color: #fde293; border-color: #fde293; }
+        .score-low { color: #f28b82; border-color: #f28b82; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark border-bottom border-secondary mb-4" style="background-color: var(--gcp-surface);">
+        <div class="container-fluid px-4">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-database-check text-warning me-2"></i> Trình kiểm thử Vector Qdrant
+            </span>
+            <a href="/" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left"></i> Quay lại Admin</a>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+        <div class="card p-4 mb-4">
+            <div class="row g-3">
+                <div class="col-md-9">
+                    <label class="form-label text-light fw-bold small">CÂU TRUY VẤN (QUERY)</label>
+                    <input type="text" id="queryInput" class="form-control form-control-lg text-light" placeholder="Nhập câu hỏi để test độ khớp của vector..." autofocus>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label fw-bold small">SỐ LƯỢNG</label>
+                    <input type="number" id="topKInput" class="form-control form-control-lg text-center" value="5" min="1" max="20">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary btn-lg w-100" onclick="runSearch()" id="btnSearch">
+                        <i class="bi bi-search me-1"></i> TÌM KIẾM
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsContainer" class="pb-5">
+            <div class="text-center mt-5 pt-5">
+                <i class="bi bi-robot" style="font-size: 4rem; opacity: 0.1;"></i>
+                <p class="mt-3 fs-5">Kết quả Vector Search sẽ hiển thị tại đây</p>
+                <small>Nhập truy vấn để xem AI bốc được những Chunk dữ liệu nào</small>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        function runSearch() {
+            const query = $('#queryInput').val().trim();
+            const top_k = $('#topKInput').val();
+            if (!query) return;
+
+            const btn = $('#btnSearch');
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span> ĐANG TÌM...');
+            
+            $.ajax({
+                url: '/api/test-search',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ query: query, top_k: parseInt(top_k) }),
+                success: function(res) {
+                    $('#resultsContainer').empty();
+                    
+                    if (res.results.length === 0) {
+                        $('#resultsContainer').html('<div class="alert alert-warning text-center border-warning bg-transparent text-warning"><i class="bi bi-exclamation-triangle me-2"></i> Không tìm thấy Chunk nào khớp với câu hỏi.</div>');
+                        return;
+                    }
+
+                    res.results.forEach((item, i) => {
+                        // Phân loại màu cho điểm số
+                        let scoreClass = item.score > 0.6 ? 'score-high' : (item.score > 0.4 ? 'score-med' : 'score-low');
+                        
+                        // Render Metadata dạng List gọn gàng
+                        let metadataHtml = '<div class="metadata-box">';
+                        for (const [key, value] of Object.entries(item.metadata)) {
+                            metadataHtml += `
+                                <div class="metadata-row">
+                                    <span class="meta-key"><i class="bi bi-tag text-secondary me-1"></i> ${key}</span>
+                                    <span class="meta-value">${value}</span>
+                                </div>`;
+                        }
+                        metadataHtml += '</div>';
+                        
+                        // Generate HTML cho mỗi Chunk
+                        $('#resultsContainer').append(`
+                            <div class="card mb-4 position-relative">
+                                <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background-color: rgba(255,255,255,0.02);">
+                                    <h5 class="mb-0 text-info fw-bold"><i class="bi bi-file-text me-2"></i> TOP #${i+1}</h5>
+                                    <div>
+                                        <span class="text-light me-2 small">Độ tương đồng (Cosine):</span>
+                                        <span class="score-badge ${scoreClass}">${item.score.toFixed(4)}</span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-4">
+                                    ${metadataHtml}
+                                    <div class="position-relative">
+                                        <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2 border-0" 
+                                                onclick="copyContent(this)" title="Copy nội dung text" style="background: #1e1e1e;">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                        <div class="chunk-box">${escapeHtml(item.content)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `);
+                    });
+                },
+                error: function(xhr) { 
+                    alert('Lỗi truy vấn: ' + (xhr.responseJSON ? xhr.responseJSON.detail : 'Unknown Error')); 
+                },
+                complete: function() { 
+                    btn.prop('disabled', false).html('<i class="bi bi-search me-1"></i> TÌM KIẾM'); 
+                }
+            });
+        }
+
+        // Chức năng copy nội dung chunk
+        function copyContent(btnNode) {
+            const content = $(btnNode).siblings('.chunk-box').text();
+            navigator.clipboard.writeText(content).then(() => {
+                const icon = $(btnNode).find('i');
+                icon.removeClass('bi-clipboard').addClass('bi-check2 text-success');
+                setTimeout(() => {
+                    icon.removeClass('bi-check2 text-success').addClass('bi-clipboard');
+                }, 2000);
+            });
+        }
+
+        // Hàm chống lỗi HTML Injection khi in text ra UI
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Hỗ trợ bấm Enter để search
+        $('#queryInput').keypress(function(e) { 
+            if(e.which == 13) runSearch(); 
+        });
+    </script>
+</body>
+</html>

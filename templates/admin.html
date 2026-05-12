@@ -198,7 +198,9 @@
             </a>
         </div>
         <div>
-            <a href="/admin/console" class="btn btn-gcp-outline py-1"><i class="bi bi-terminal me-1"></i> Go to Server Console</a>
+			<a href="/test-search" target="_blank" class="btn btn-gcp-outline py-1"><i class="bi bi-database-check me-1"></i> TEST TRUY VẤN</a>
+			<a href="/upload-history" target="_blank" class="btn btn-gcp-outline py-1"><i class="bi bi-clock-history me-1"></i> XEM LỊCH SỬ</a>
+            <a href="/admin/console" class="btn btn-gcp-outline py-1"><i class="bi bi-terminal me-1"></i> ĐI ĐẾN TRANG CONSOLE</a>
         </div>
     </header>
 
@@ -261,14 +263,15 @@
                                     </ul>
                                 </div>
                                 <div class="gcp-card-body p-0">
-                                    <div class="p-3 m-3 rounded" style="background-color: rgba(138, 180, 248, 0.1); border-left: 3px solid var(--gcp-primary);">
-                                        <div class="d-flex align-items-start gap-2">
-                                            <i class="bi bi-info-circle text-primary mt-1"></i>
-                                            <div class="text-muted" style="font-size: 13px; color: white !important;">
-                                                Sau khi upload, file sẽ tự động được bóc tách nội dung thô sang định dạng Markdown (.md). Hãy nhấp vào <b>Sửa</b> để kiểm tra lại các lỗi ngữ nghĩa hoặc bảng biểu (nếu có). Sau khi thêm/sửa file, hãy sang trang <b>Server Console</b> để chạy lại Pipeline Đồng bộ Vector.
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <div class="p-3 m-3 rounded d-flex justify-content-between align-items-center" style="background-color: rgba(138, 180, 248, 0.1); border-left: 3px solid var(--gcp-primary);">
+										<div class="d-flex align-items-start gap-2 pe-3">
+											<i class="bi bi-info-circle text-primary mt-1"></i>
+											<div class="text-muted" style="font-size: 13px; color: white !important;">
+												Hệ thống <b>TỰ ĐỘNG</b> đồng bộ Vector sau mỗi lần Upload file mới hoặc Lưu chỉnh sửa (.md).<br>
+												Tuy nhiên, nếu bị lỗi đồng bộ hoặc muốn quét sạch (Rebuild) dữ liệu từ đầu, bạn có thể chạy Đồng bộ thủ công ở ChatBot Clould Console mục Vector Database Sync.
+											</div>
+										</div>
+									</div>
 
                                     <div class="tab-content" id="fileTabsContent">
                                         <div class="tab-pane fade show active" id="md-pane" role="tabpanel">
@@ -506,18 +509,31 @@
         }
 
 		Dropzone.options.myDropzone = {
-			paramName: "file", maxFilesize: 50, acceptedFiles: ".pdf,.doc,.docx,.txt",
+			paramName: "file", 
+			maxFilesize: 50, 
+			acceptedFiles: ".pdf,.doc,.docx,.txt,.md",
 			init: function() {
 				let activeUploads = 0;
 				this.on("sending", function(file, xhr, formData) {
-					formData.append("folder", currentSelectedFolder); activeUploads++; $('#dz-loading').css('display', 'flex');
+					formData.append("folder", currentSelectedFolder); 
+					activeUploads++; 
+					$('#dz-loading').css('display', 'flex');
 				});
 				this.on("success", function(file, response) {
-					loadFiles(); historyDataTable.ajax.reload(); setTimeout(() => { this.removeFile(file); }, 2000);
+					loadFiles(); 
+					// Cập nhật lại bảng lịch sử ngay sau khi từng file xong
+					if(window.historyDataTable) historyDataTable.ajax.reload(); 
+					setTimeout(() => { this.removeFile(file); }, 2000);
 				});
-				this.on("error", function(file, errorMessage) { alert("Lỗi: " + (errorMessage.detail || errorMessage)); });
+				this.on("error", function(file, errorMessage) { 
+					alert("Lỗi: " + (errorMessage.detail || errorMessage)); 
+				});
 				this.on("complete", function(file) {
-					activeUploads--; if (activeUploads <= 0) { activeUploads = 0; $('#dz-loading').hide(); }
+					activeUploads--; 
+					if (activeUploads <= 0) { 
+						activeUploads = 0; 
+						$('#dz-loading').hide(); 
+					}
 				});
 			}
 		};
