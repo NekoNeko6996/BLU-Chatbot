@@ -16,6 +16,15 @@
 			--gcp-border: #3c4043;
 		}
         body { background-color: var(--gcp-bg); color: var(--gcp-text); font-family: 'Roboto', sans-serif; }
+		
+		::placeholder {
+		  color: var(--gcp-text) !important;
+		  opacity: 1; /* Firefox */
+		}
+
+		::-ms-input-placeholder { /* Edge 12-18 */
+		  color: var(--gcp-text) !important;
+		}
         
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }

@@ -841,6 +841,10 @@ async def delete_file(folder: str, filename: str):
 
     return {"message": f"Đã xóa hoàn toàn {filename} và dữ liệu AI liên quan!"}
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("templates/favicon.ico")
+
 if __name__ == "__main__":
     print("Khởi chạy Admin Service tại http://localhost:8081")
     uvicorn.run(app, host="0.0.0.0", port=8081)
