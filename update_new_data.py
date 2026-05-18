@@ -134,7 +134,7 @@ def main():
         
         is_first_batch = (i == 0)
         
-        vectorstore = QdrantVectorStore.from_documents(
+        QdrantVectorStore.from_documents(
             documents=batch,
             embedding=dense,
             sparse_embedding=sparse,
@@ -144,8 +144,6 @@ def main():
             retrieval_mode=RetrievalMode.HYBRID,
             force_recreate=is_first_batch
         )
-        
-        vectorstore.add_documents(documents=batch, ids=ids)
         
         logger.info(f"-> Đã nạp {min(i+EMBEDDINGS_BATCH_SIZE, len(splits))}/{len(splits)} chunks...")
 

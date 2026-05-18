@@ -1,5 +1,6 @@
 import os
 import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 from qdrant_client import QdrantClient
@@ -11,8 +12,10 @@ from langchain_qdrant import QdrantVectorStore, FastEmbedSparse, RetrievalMode
 from dotenv import load_dotenv
 import uuid
 import json
+from langchain_core.documents import Document
 load_dotenv(override=True)
 
+DOC_DIR = os.getenv("DOC_DIR", "documentBL")
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 HISTORY_FILE = LOG_DIR / "upload_history.json"
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -67,6 +70,34 @@ def track_changes(file_name, old_chunks, new_chunks, version):
 
 def get_qdrant_client():
     return GLOBAL_QDRANT_CLIENT
+
+def get_semantic_source(file_path, base_dir=DOC_DIR):
+    try:
+        rel_path = os.path.relpath(file_path, base_dir)
+        path_str = os.path.splitext(rel_path)[0]
+        return " > ".join([re.sub(r'^\d+(-\d+)*-', '', p).replace('-', ' ').capitalize() for p in path_str.split(os.sep)])
+    except Exception:
+        return os.path.basename(file_path)
+
+def split_text_preserve_tables(text, max_chunk_size=1000):
+    blocks = text.split('\n\n')
+    chunks = []
+    current_chunk = ""
+    for block in blocks:
+        is_table = bool(re.search(r'\|.*\|.*\n\s*\|[-:\s|]+\|', block))
+        if is_table:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+            chunks.append(block.strip())
+        else:
+            if len(current_chunk) + len(block) < max_chunk_size:
+                current_chunk += "\n\n" + block if current_chunk else block
+            else:
+                if current_chunk: chunks.append(current_chunk.strip())
+                current_chunk = block
+    if current_chunk: chunks.append(current_chunk.strip())
+    return chunks
 
 def advanced_clean_text(text: str) -> str:
     """Đã sửa: Chỉ xóa các dòng trống và trùng lặp liền kề, KHÔNG xóa dữ liệu ngắn/lặp ngẫu nhiên"""
@@ -144,29 +175,48 @@ def process_and_upsert_file(file_path: str):
     cleaned_text = advanced_clean_text(raw_text)
 
     # 2. Chunking
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.create_documents([cleaned_text])
+    headers_to_split_on = [("#", "Header 1"), ("##", "Header 2"), ("###", "Header 3"), ("####", "Header 4")]
+    markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+    md_docs = markdown_splitter.split_text(cleaned_text)
 
     # 3. Lấy Version & Xóa dữ liệu cũ
     new_version = delete_old_vectors_and_get_version(file_name)
     current_date = datetime.now().strftime("%d/%m/%Y")
+    semantic_source = get_semantic_source(file_path)
 
     # 4. Gắn Metadata & Header vào từng Chunk
+    final_chunks = []
     custom_ids = []
-    for i, doc in enumerate(splits):
-        # Nhúng Version trực tiếp vào text để AI đọc được
-        header = f"[TÀI LIỆU: {file_name} | VERSION: {new_version} | CẬP NHẬT: {current_date}]\n"
-        doc.page_content = header + doc.page_content
+    chunk_index = 0
+
+    for md_doc in md_docs:
+        heading_str = " > ".join([f"{v}" for k, v in md_doc.metadata.items() if k.startswith("Header")])
+        sub_chunks = split_text_preserve_tables(md_doc.page_content)
         
-        # Chuẩn hóa metadata
-        doc.metadata = {
-            "source": file_name,
-            "version": new_version,
-            "updated_at": current_date
-        }
-        # Tạo ID tĩnh (Hash = Nội dung + Tên file + Index)
-        hash_str = hashlib.md5((doc.page_content + file_name + str(i)).encode('utf-8')).hexdigest()
-        custom_ids.append(str(uuid.UUID(hash_str)))
+        for chunk_text in sub_chunks:
+            if not chunk_text.strip(): continue
+            
+            context_path = semantic_source
+            if heading_str: context_path += f" > {heading_str}"
+            
+            # Header chuẩn hóa theo ngữ nghĩa
+            header = f"[TÀI LIỆU: {file_name} | NGỮ NGHĨA: {context_path} | VERSION: {new_version} | CẬP NHẬT: {current_date}]\n\n"
+            injected_content = header + chunk_text
+            
+            new_metadata = md_doc.metadata.copy()
+            new_metadata.update({
+                "source": file_name,
+                "version": new_version,
+                "updated_at": current_date,
+                "semantic_source": semantic_source
+            })
+            
+            final_chunks.append(Document(page_content=injected_content, metadata=new_metadata))
+            
+            # Tạo ID tĩnh
+            hash_str = hashlib.md5((injected_content + file_name + str(chunk_index)).encode('utf-8')).hexdigest()
+            custom_ids.append(str(uuid.UUID(hash_str)))
+            chunk_index += 1
 
     # 5. Upsert vào Qdrant
     vectorstore = QdrantVectorStore(
@@ -176,9 +226,9 @@ def process_and_upsert_file(file_path: str):
         sparse_embedding=SPARSE_MODEL,
         retrieval_mode=RetrievalMode.HYBRID
     )
-    vectorstore.add_documents(documents=splits, ids=custom_ids)
+    vectorstore.add_documents(documents=final_chunks, ids=custom_ids)
     
     # --- GHI LOG LỊCH SỬ ---
-    new_texts = [d.page_content for d in splits]
+    new_texts = [d.page_content for d in final_chunks]
     track_changes(file_name, old_chunks, new_texts, new_version)
     return new_version
