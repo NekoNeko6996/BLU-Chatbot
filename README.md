@@ -18,6 +18,8 @@ Dự án phát triển Trợ lý ảo (AI Chatbot) dựa trên kiến trúc **RA
 
 Hệ thống được chia thành hai luồng kiến trúc chính, quản lý bởi các tiến trình độc lập nhưng giao tiếp chặt chẽ:
 
+![](Data_Ingestion_and_RAG-2026-05-18-051348.png)
+
 - **Luồng Chuẩn bị Dữ liệu (Data Ingestion Pipeline - `admin-server.py` / `update_new_data.py`):**
   - **Load & Extract:** Hệ thống nhận tài liệu từ người dùng, sử dụng công cụ Docling phân tích PDF/Word phức tạp. Có tích hợp mô hình Gemini Vision để tự động phân tích và tạo chú thích cho các hình ảnh trong tài liệu.
   - **Clean & Chunking:** Dữ liệu thô được làm sạch, xóa ký tự rác và chia nhỏ (chunking) với kích thước tối ưu, đồng thời bảo toàn định dạng của các bảng biểu.
@@ -81,10 +83,11 @@ python admin-server.py
 ```
 Sau khi tiến trình thông báo khởi động xong, hãy mở trình duyệt và truy cập:
 - **http://localhost:8081**: Giao diện Quản lý File và Dữ liệu RAG.
+![](file_manager_ui.png)
 - **http://localhost:8081/admin/console**: Giao diện Admin Console để điều khiển tắt/mở các tiến trình con.
-
+![](server_console_manager_ui.png)
 ### 4.2. Tải lên tài liệu và chạy Update DB lần đầu
-- Trên trang giao diện **http://localhost:8081**, tiến hành tải lên các file tài liệu định dạng Word hoặc PDF chứa thông tin cần thiết.
+- Trên trang giao diện **http://localhost:8081**, tiến hành tải lên các file tài liệu định dạng Word chứa thông tin cần thiết vào các thư mục (dữ liệu và cây thư mục càn sạch sẽ và logic thì dữ liệu sau embedding càn chính xác).
 - Admin Server sẽ tự động kích hoạt tiến trình Docling để đọc văn bản, phân mảnh (chunking), nhúng vector và đẩy tự động vào Qdrant.
 - Ngoài ra, để thao tác đồng bộ thủ công cho cơ sở dữ liệu vector, bạn có thể vào tab **Vector Database Sync** trên Admin Console và nhấn **Run Pipeline**.
 
@@ -100,3 +103,52 @@ ngrok http 8081
 - Lấy đường dẫn public do Ngrok cung cấp (Ví dụ: `https://xyz.ngrok-free.dev`).
 - Mở file nguồn của client `templates/chat-client/blu-widget.js`, tìm và thay đổi biến `API_BASE_URL` bằng đường dẫn Ngrok vừa tạo.
 - Cuối cùng, nhúng đoạn thẻ `<script src="https://xyz.ngrok-free.dev/chat-client/blu-widget.js"></script>` vào trong phần `<head>` của trang web đại học cần gắn chatbot. Hệ thống giao tiếp sẽ được liên kết hoàn chỉnh.
+
+### 4.5. Nhúng Script Chatbot Client vào Website (Cấu hình Server Local/Cụ thể)
+Để nhúng chatbot trực tiếp vào một trang đích bằng IP/Domain của máy chủ:
+1. Thêm thẻ script `<script src="http://172.16.2.88:8000/chat-client/blu-widget.js"></script>` vào trang đích (nhớ thay đổi URL máy chủ ở link này và cả trong source script tại `templates/chat-client/blu-widget.js`).
+2. Vào **Admin Console** hoặc mở file `.env` ở server để thêm/thay đổi Trust URL cho cấu hình CORS.
+3. Khởi động lại Admin Server.
+
+## 5. Hướng dẫn Cấu hình Google Sheets Log
+Hệ thống cho phép lưu lại lịch sử hội thoại lên Google Sheets, bao gồm tính năng tự động tạo Tab theo tháng và chống lỗi SSL đa luồng.
+
+**Bước 1: Thiết lập Google Cloud & Service Account**
+1. Truy cập [Google Cloud Console](https://console.cloud.google.com/).
+2. Vào **APIs & Services > Library**, tìm và bật **Google Sheets API** và **Google Drive API**.
+3. Tạo Service Account tại **APIs & Services > Credentials** > **Create Credentials > Service Account**.
+4. Tại Service Account vừa tạo, vào tab **KEYS** > **Add Key > Create new key > JSON**.
+5. Tải file `.json` về, đổi tên thành `google_credentials.json` và để vào thư mục gốc của dự án (cùng cấp với `serverBL.py`).
+6. Mở file `google_credentials.json`, copy địa chỉ email tại trường `"client_email"`.
+7. Truy cập Google Drive, tạo một Google Sheet mới (VD: `BLU_Chatbot_Logs`), nhấn **Share** (Chia sẻ) và cấp quyền **Editor** (Người chỉnh sửa) cho email Service Account vừa copy.
+8. Copy **Spreadsheet ID** từ thanh URL (đoạn mã nằm giữa `/d/` và `/edit`).
+
+**Bước 2: Cập nhật biến môi trường (.env)**
+Thêm các cấu hình sau vào file `.env`:
+```env
+# GOOGLE SHEETS CONFIG
+GOOGLE_SHEETS_CRED_FILE=google_credentials.json
+GOOGLE_SPREADSHEET_ID=dán_spreadsheet_id_của_bạn_vào_đây
+```
+
+## 6. Quy tắc Soạn thảo Tài liệu (Word) làm Dữ liệu cho Chatbot
+Để hệ thống phân tích và nhúng dữ liệu chính xác, tài liệu đầu vào cần tuân thủ các quy định sau:
+
+- **Cấu trúc ưu tiên:** Chữ -> Bảng biểu -> Hình ảnh.
+- **Không dùng icon/ký tự đặc biệt:** Tránh sử dụng icon dạng hình ảnh copy-paste vì chúng sẽ làm nhiễu thông tin trong quá trình xử lý dữ liệu.
+- **Hình ảnh:**
+  - Hình ảnh đưa vào cần rõ ràng.
+  - Sử dụng định dạng Wrap Text là **Top and Bottom** (chữ trên và dưới) để văn bản không bị lẫn lộn với chú thích ảnh sinh tự động sau này.
+  - Nên có đoạn văn bản miêu tả nội dung bức ảnh ở bên dưới để dễ dàng truy xuất.
+- **Định dạng cấu trúc:**
+  - Dùng **Heading** (Heading 1 đến 7) để phân cấp các đề mục, tên đoạn, tiêu đề của tài liệu. **Tuyệt đối không dùng cách bôi đậm hoặc tăng kích thước chữ thay cho Heading**, vì nó không có chức năng phân chia khi đưa vào xử lý chunking sau này.
+  - Dùng **Numbering** hoặc **Bullets** để liệt kê danh sách. Có thể kết hợp cả Heading và Numbering cho các tiêu đề dạng danh sách (mục 1, mục 2, v.v.).
+  - Các bảng biểu phải có cấu trúc đơn cột, đơn hàng (không gộp cột, gộp hàng, gộp ô) và phải có tiêu đề ở phía trên bảng.
+  - Các bảng phức tạp hoặc quá dài cần được tách nhỏ thành nhiều bảng (mỗi bảng tốt nhất chỉ nên tối đa khoảng 15 dòng và 8 cột).
+- **Nội dung:**
+  - Dữ liệu phải cô đọng, chính xác và bám sát với tên file. (Ví dụ: file `học phí` chỉ chứa thông tin liên quan đến học phí, file `thông tin ngành` chỉ chứa thông tin của đúng ngành đó).
+  - Không lặp lại thông tin trên nhiều file (Ví dụ: thông tin liên hệ chỉ cần 1 file duy nhất dùng chung cho các bộ phận như tuyển sinh, giáo vụ, ký túc xá).
+  - Nên thêm phần **CÂU HỎI THƯỜNG GẶP** và câu trả lời tương ứng ở cuối mỗi file.
+- **Quy tắc đặt tên:**
+  - Tên file dữ liệu cần bao gồm năm áp dụng (VD: `học phí năm 2026.docx`).
+  - Heading 1 (Tiêu đề lớn đầu tiên) cũng phải kèm theo năm áp dụng (VD: `HỌC PHÍ NĂM 2026`). Khuyến nghị tham khảo các thư mục dữ liệu chuẩn đã qua chỉnh sửa.
