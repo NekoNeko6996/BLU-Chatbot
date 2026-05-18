@@ -19,3 +19,4 @@ __pycache__/
 *.pyo
 processed_files_cache.json
 report_log.txt
+/project_dev_documments
