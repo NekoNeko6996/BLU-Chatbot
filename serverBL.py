@@ -298,7 +298,7 @@ except Exception as e:
 # ========== TOOL & LANGGRAPH WORKFLOW ==========
 @tool
 def search_admission_info(query: str) -> str:
-    """Sử dụng để tìm kiếm thông tin về tuyển sinh, ngành học, điểm chuẩn, học phí, chỉ tiêu của Đại học Bạc Liêu."""
+    """Sử dụng để tìm kiếm MỌI THÔNG TIN liên quan đến Đại học Bạc Liêu, bao gồm: tuyển sinh, ngành học, điểm chuẩn, học phí, chỉ tiêu, cơ sở vật chất, ký túc xá (KTX), địa chỉ, quy trình, thời gian và các thắc mắc chung của sinh viên."""
     try:
         # 1. Truy xuất tài liệu thô từ Qdrant
         raw_docs = retriever.invoke(query) 
@@ -325,12 +325,13 @@ def agent_node(state: AgentState):
     sys_msg = SystemMessage(content="""Bạn là chuyên viên tư vấn tuyển sinh của Đại học Bạc Liêu (BLU).
 QUY TẮC:
 1. CHỈ SỬ DỤNG TIẾNG VIỆT. Trả lời ngắn gọn, đúng trọng tâm.
-2. NẾU CẦN TÌM THÔNG TIN hãy sử dụng công cụ tìm kiếm được cung cấp.
+2. NẾU CẦN TÌM THÔNG TIN hãy sử dụng công cụ tìm kiếm được cung cấp. BẮT BUỘC phải gọi công cụ tìm kiếm khi người dùng chuyển sang một chủ đề mới, hỏi một khái niệm mới, hoặc hỏi các thông tin cụ thể (chỉ tiêu, điểm chuẩn, học phí, phương thức, thời gian...) ngay cả khi bạn nghĩ trong lịch sử chat đã có.
 3. TUYỆT ĐỐI KHÔNG thông báo hành động trước khi gọi tool (VD: Không nói "Mình sẽ tra cứu...", "Vui lòng đợi...", "Dựa theo lịch sử..."). Nếu cần dùng công cụ, HÃY CHỈ XUẤT TRỰC TIẾP CÚ PHÁP GỌI TOOL mà không kèm theo bất kỳ văn bản/câu từ nào khác.
-4. Nếu dữ liệu có sự mâu thuẫn, hãy sữ ưu tiên dữ liệu có version cao hơn.
-5. Nếu không tìm thấy thông tin từ công cụ, hãy nói rõ: "Hiện tại chưa có thông tin về vấn đề này". Tuyệt đối không tự bịa thông tin, URL, SĐT.
-6. Nếu câu hỏi không liên quan đến vấn đề tuyển sinh, việc làm sau tốt nghiệp mà liên quan đến các chủ đề khác như cuộc sống, thời tiết, nấu nướng, tâm lý,... thì nên từ chối trả lời lịch sự và không cần gọi tool tìm kiếm.
-7. Sử dụng cách gọi "Mình" - "Bạn".
+4. KHÔNG ĐƯỢC nhầm lẫn giữa "Quy mô đào tạo" (tổng số sinh viên đang học) và "Chỉ tiêu tuyển sinh" (số lượng sẽ tuyển mới). Nếu dữ liệu có sự mâu thuẫn, hãy ưu tiên dữ liệu có version cao hơn hoặc năm mới nhất.
+5. Nếu không tìm thấy thông tin từ công cụ, hãy nói rõ: "Hiện tại chưa có thông tin về vấn đề này". 
+6. Tuyệt đối không tự bịa thông tin, URL, Số điện thoại, KHÔNG đưa các đường link vào câu trả lời nếu link đó không nằm trong chunk tài liệu liên quan.
+7. Nếu câu hỏi liên quan đến các chủ đề khác như cuộc sống, thời tiết, nấu nướng, tâm lý, tình yêu, vẽ tranh, làm thơ, tạo nhạc... thì nên từ chối trả lời lịch sự và không cần gọi tool tìm kiếm.
+8. Sử dụng cách gọi "Mình" - "Bạn".
 """)
     recent_messages = state["messages"][-(MAX_CHAT_HISTORY * 2):]
     messages = [sys_msg] + recent_messages
@@ -420,6 +421,20 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
 
             if LANGCHAIN_DEBUG: 
                 print("\n--- KẾT THÚC LUỒNG STREAM ---")
+                
+            if full_answer.strip():
+                chat_headers = ["Thời gian", "Session ID", "Câu hỏi (User)", "Trả lời (Bot)"]
+                chat_row_data = [
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    session_id,
+                    user_msg,
+                    full_answer.strip()
+                ]
+                
+                # Gọi hàm lưu Sheets trong một Thread ngầm để không chặn luồng Async của FastAPI
+                asyncio.create_task(
+                    asyncio.to_thread(push_to_google_sheets, "ChatLog", chat_headers, chat_row_data)
+                )
             
         except asyncio.CancelledError:
             raise
