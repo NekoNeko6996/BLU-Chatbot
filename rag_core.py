@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 import uuid
 import json
 from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
 load_dotenv(override=True)
 
 DOC_DIR = os.getenv("DOC_DIR", "documentBL")
@@ -23,9 +24,11 @@ COLLECTION_NAME = os.getenv("COLLECTION_NAME", "blu")
 
 # Khởi tạo model 1 lần (Global) để tránh load lại mỗi khi upload
 GLOBAL_QDRANT_CLIENT = QdrantClient(url=QDRANT_URL)
-DENSE_MODEL = HuggingFaceEmbeddings(
-    model_name=os.getenv("DENSE_EMBEDDINGS_MODEL_NAME", "BAAI/bge-m3"),
-    model_kwargs={"device": os.getenv("DENSE_EMBEDDINGS_MODEL_KWARGS_DEVICE", "cpu")}
+DENSE_MODEL = OpenAIEmbeddings(
+    openai_api_key="empty", # Infinity chạy local không cần key
+    openai_api_base=os.getenv("INFINITY_API_BASE", "http://localhost:7997"),
+    model=os.getenv("DENSE_EMBEDDINGS_MODEL_NAME", "BAAI/bge-m3"),
+    check_embedding_ctx_length=False
 )
 SPARSE_MODEL = FastEmbedSparse(model_name=os.getenv("SPARSE_EMBEDDINGS_MODEL_NAME", "Qdrant/bm25"))
 

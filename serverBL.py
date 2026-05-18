@@ -6,6 +6,7 @@ import pandas as pd
 import logging
 import asyncio
 import re
+import requests
 import threading
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
@@ -34,9 +35,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.globals import set_llm_cache
 from langchain_community.cache import SQLiteCache
 from langchain.tools import tool
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, FastEmbedSparse, RetrievalMode
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings # Dùng OpenAIEmbeddings cho Infinity
 from langchain_ollama import ChatOllama
 from langgraph.graph.message import AnyMessage, add_messages
 from langgraph.graph import StateGraph, START, END
@@ -63,15 +63,15 @@ GG_SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID")
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "blu")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
-EMBENDDING_MODEL_KWARGS_DEVICE = os.getenv("EMBENDDING_MODEL_KWARGS_DEVICE", "cpu")
 
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+# Cấu hình Model Embedding (Gọi qua Infinity thay vì HuggingFace Local)
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+
+# Cấu hình Reranker & Retriever
 MAX_CHAT_HISTORY = int(os.getenv("MAX_CHAT_HISTORY", 4))
 DEFAULT_RERANK_TOP_N = int(os.getenv("DEFAULT_RERANK_TOP_N", 7))
 SEARCH_KWARGS = int(os.getenv("SEARCH_KWARGS", 20))
 MAX_CHAT_RESPONSE_TOKEN = int(os.getenv("MAX_CHAT_RESPONSE_TOKEN", 2048))
-RETRIEVER_MODEL_KWARGS_DEVICE = os.getenv("RETRIEVER_MODEL_KWARGS_DEVICE", "cpu")
 
 LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "qwen2.5:14b")
@@ -82,6 +82,10 @@ LLM_TOP_P = float(os.getenv("LLM_TOP_P", 0.1))
 EXTERNAL_LLM_MODEL_NAME = os.getenv("EXTERNAL_LLM_MODEL_NAME", "gemini-3.1-flash-lite-preview")
 EXTERNAL_LLM_API_BASE = os.getenv("EXTERNAL_LLM_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai/")
 EXTERNAL_API_KEY = os.getenv("EXTERNAL_LLM_API_KEY")
+
+# Cấu hình Infinity Server (Model chung cho cả hệ thống)
+INFINITY_API_BASE = os.getenv("INFINITY_API_BASE", "http://localhost:7997")
+RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 
 ASSETS_DIR = os.getenv("ASSETS_DIR", "assets")
 LOG_DIR = os.getenv("LOG_DIR", "logs")
@@ -204,27 +208,60 @@ def setup_ggsheet():
         logger.error(f"Lỗi kết nối GG Sheets: {e}")
         return None
 
+# ========== INFINITY RERANK API ==========
+def api_rerank(query: str, documents: list, top_k: int = 5):
+    """Gửi request sang Infinity Server để rerank danh sách Document."""
+    if not documents:
+        return []
+        
+    url = f"{INFINITY_API_BASE}/rerank"
+    docs_text = [doc.page_content for doc in documents]
+    
+    payload = {
+        "query": query,
+        "documents": docs_text,
+        "model": RERANKER_MODEL_NAME,
+        "top_n": top_k
+    }
+    
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        
+        reranked_docs = []
+        for res in results:
+            idx = res["index"]
+            score = res["relevance_score"]
+            doc = documents[idx]
+            doc.metadata["rerank_score"] = score 
+            reranked_docs.append((doc, score))
+            
+        return reranked_docs
+    except Exception as e:
+        logger.error(f"Lỗi gọi API Rerank: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            logger.error(f"Chi tiết lỗi từ Infinity: {e.response.text}")
+        return [(doc, 0.0) for doc in documents[:top_k]]
+
 # ========== CẤU HÌNH AI & RAG ==========
 def setup_vector_store():
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL, model_kwargs={'device': EMBENDDING_MODEL_KWARGS_DEVICE}, encode_kwargs={'normalize_embeddings': True})
+    # Load Embedding thông qua API Infinity (Thay cho HuggingFace cục bộ)
+    embeddings = OpenAIEmbeddings(
+        openai_api_key="empty", 
+        openai_api_base=INFINITY_API_BASE,
+        model=EMBEDDING_MODEL,
+        check_embedding_ctx_length=False
+    )
     client = QdrantClient(url=QDRANT_URL)
     sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
     return QdrantVectorStore(client=client, collection_name=COLLECTION_NAME, embedding=embeddings, sparse_embedding=sparse_embeddings, retrieval_mode=RetrievalMode.HYBRID)
 
 def setup_retriever(qdrant):
-    hybrid_retriever = qdrant.as_retriever(search_type="similarity", search_kwargs={"k": SEARCH_KWARGS})
-    try:
-        from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
-        from langchain_classic.retrievers.document_compressors.cross_encoder_rerank import CrossEncoderReranker
-        from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-        cross_encoder = HuggingFaceCrossEncoder(model_name=RERANKER_MODEL, model_kwargs={'device': RETRIEVER_MODEL_KWARGS_DEVICE})
-        return ContextualCompressionRetriever(base_compressor=CrossEncoderReranker(model=cross_encoder, top_n=DEFAULT_RERANK_TOP_N), base_retriever=hybrid_retriever)
-    except:
-        hybrid_retriever.search_kwargs["k"] = DEFAULT_RERANK_TOP_N 
-        return hybrid_retriever
+    # Trả về retriever cơ bản, lấy số lượng SEARCH_KWARGS (VD: 20 chunks)
+    return qdrant.as_retriever(search_type="similarity", search_kwargs={"k": SEARCH_KWARGS})
 
 def setup_llm():
-    # Sử dụng ChatOpenAI trỏ tới chuẩn v1 của Ollama để Tool Calling chuẩn xác hơn
     local_llm = ChatOpenAI(
         model_name=LLM_MODEL_NAME,
         openai_api_base=LLM_API_BASE,
@@ -263,9 +300,18 @@ except Exception as e:
 def search_admission_info(query: str) -> str:
     """Sử dụng để tìm kiếm thông tin về tuyển sinh, ngành học, điểm chuẩn, học phí, chỉ tiêu của Đại học Bạc Liêu."""
     try:
-        docs = retriever.invoke(query) 
-        if not docs: return "Không tìm thấy thông tin cụ thể trong cơ sở dữ liệu."
-        return "\n\n".join([f"--- NGUỒN: {doc.metadata.get('source', 'Không rõ')} ---\n{doc.page_content}" for doc in docs])
+        # 1. Truy xuất tài liệu thô từ Qdrant
+        raw_docs = retriever.invoke(query) 
+        if not raw_docs: return "Không tìm thấy thông tin cụ thể trong cơ sở dữ liệu."
+        
+        # 2. Rerank kết quả thông qua Infinity API
+        reranked_results = api_rerank(query, raw_docs, top_k=DEFAULT_RERANK_TOP_N)
+        
+        if not reranked_results:
+            return "Không tìm thấy thông tin cụ thể trong cơ sở dữ liệu."
+
+        # 3. Format đầu ra gửi vào cho Bot
+        return "\n\n".join([f"--- NGUỒN: {doc.metadata.get('source', 'Không rõ')} ---\n{doc.page_content}" for doc, score in reranked_results])
     except Exception as e:
         return f"Lỗi hệ thống khi truy xuất: {str(e)}"
 
@@ -276,7 +322,6 @@ class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
 def agent_node(state: AgentState):
-    """Đọc toàn bộ lịch sử, quyết định gọi tool hoặc sinh câu trả lời cuối cùng."""
     sys_msg = SystemMessage(content="""Bạn là chuyên viên tư vấn tuyển sinh của Đại học Bạc Liêu (BLU).
 QUY TẮC:
 1. CHỈ SỬ DỤNG TIẾNG VIỆT. Trả lời ngắn gọn, đúng trọng tâm.
@@ -294,7 +339,6 @@ QUY TẮC:
     return {"messages": [response]}
 
 def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
-    """Kiểm tra xem LLM có muốn gọi tool không."""
     last_message = state["messages"][-1]
     if last_message.tool_calls:
         return "tools"
@@ -305,9 +349,7 @@ workflow.add_node("agent", agent_node)
 workflow.add_node("tools", ToolNode(tools))
 
 workflow.add_edge(START, "agent")
-# Nếu có tool -> sang node tools. Nếu không -> KẾT THÚC
 workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "__end__": END})
-# Sau khi tool chạy xong, BẮT BUỘC quay lại agent để tổng hợp câu trả lời cho user
 workflow.add_edge("tools", "agent")
 
 memory = MemorySaver()
@@ -341,10 +383,7 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
     if not user_msg.strip():
         raise HTTPException(status_code=400, detail="Tin nhắn không được để trống")
 
-    # LangGraph sẽ tự động lấy lịch sử cũ dựa vào thread_id
     config = {"configurable": {"thread_id": session_id}}
-    
-    # Chỉ truyền tin nhắn mới nhất vào
     inputs = {"messages": [HumanMessage(content=user_msg)]}
 
     async def stream_generator():
@@ -358,29 +397,23 @@ async def chat_stream_endpoint(request: Request, chat_req: ChatRequest, api_key:
                 name = event["name"]
 
                 if LANGCHAIN_DEBUG:
-                    # ---  IN LOG RA CONSOLE ---
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Event: {kind} | Node: {name}")
                     if kind == "on_chat_model_stream":
                         chunk_content = event["data"]["chunk"].content
                         if chunk_content:
                             print(f"Chunk ({name}): {chunk_content}", end="", flush=True)
-                    # ---------------------------------------------
 
-                # 1. BẮT SỰ KIỆN ĐỂ PHÁT TRẠNG THÁI
                 if kind == "on_chain_start":
                     if name == "agent":
                         yield "[[STATUS:Đang phân tích...]]"
                     elif name == "tools":
                         yield "[[STATUS:Đang tra cứu...]]"
 
-                # 2. PHÁT NỘI DUNG VĂN BẢN TRẢ LỜI
                 if kind == "on_chat_model_stream" and event["metadata"].get("langgraph_node") == "agent":
                     chunk = event["data"]["chunk"]
-
                     if chunk.tool_call_chunks:
                         continue
-
-                    if chunk.content: # Chỉ lấy nội dung văn bản trực tiếp
+                    if chunk.content: 
                         full_answer += chunk.content
                         yield chunk.content
                         await asyncio.sleep(0.01)
